@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T11:50:00.777Z */
+/* Quick Journal — bundled 2026-09-25T13:57:23.095Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -645,12 +645,6 @@ function splitTimestamp(text) {
   if (!m) return { text };
   return { time: m[1], text: text.slice(m[0].length) };
 }
-function taskPrefix(status) {
-  if (status === " ") return "\u2610";
-  if (status === "x" || status === "X") return "\u2611";
-  if (status === "-") return "\u2715";
-  return "\u25D0";
-}
 function collectEntries(date, lines, sections) {
   var _a;
   const out = [];
@@ -714,7 +708,8 @@ function collectEntries(date, lines, sections) {
           sectionId: section.id,
           kind: "line",
           ...ts,
-          text: `${taskPrefix(task[1])} ${ts.text}`,
+          // 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
+          text: ts.text,
           content: ts.text,
           prefix: line.slice(0, line.length - task[2].length),
           lineIndex: i,
@@ -770,6 +765,12 @@ function convertListTask(raw) {
     return `${list[1]}[ ] ${list[2]}`;
   }
   return null;
+}
+function taskSymbol(status) {
+  if (status === " ") return "\u2610";
+  if (status === "x" || status === "X") return "\u2611";
+  if (status === "-") return "\u2715";
+  return "\u25D0";
 }
 
 // src/services/file-writer.ts
@@ -1581,7 +1582,8 @@ function renderFeedMini(parent, plugin, entries) {
         cls: "qj-feed-meta",
         text: `${(_a = names.get(e.sectionId)) != null ? _a : ""}${e.time ? ` \xB7 ${e.time}` : ""}`
       });
-      row.createSpan({ cls: "qj-mini-text", text: e.text.replace(/\n/g, " ") });
+      const text = e.taskStatus !== void 0 ? `${taskSymbol(e.taskStatus)} ${e.text}` : e.text;
+      row.createSpan({ cls: "qj-mini-text", text: text.replace(/\n/g, " ") });
     }
   }
   const more = card.createEl("button", { cls: "qj-btn", text: t("\u6253\u5F00\u901F\u8BB0\u9762\u677F") });
