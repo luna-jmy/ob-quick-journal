@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T14:47:32.326Z */
+/* Quick Journal — bundled 2026-09-25T15:08:44.246Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -120,7 +120,6 @@ var DEFAULT_JOURNALS = {
   annual: { dir: "500 Journal/510 Annual", sections: [] }
 };
 var DEFAULT_SUMMARY_LAYOUT = [
-  "quick-capture",
   "task-chart",
   "checkin",
   "trend",
@@ -1479,9 +1478,20 @@ var QueryBridge = class {
     return ((_a = this.plugin("dataview")) == null ? void 0 : _a.api) != null;
   }
   get tasksAvailable() {
+    return this.tasksApi() !== null;
+  }
+  /** Tasks 的 API 入口：插件实例 api 或全局 tasksApiV3（探测不到返回 null）。 */
+  tasksApi() {
     var _a;
-    const api = (_a = this.plugin("obsidian-tasks")) == null ? void 0 : _a.api;
-    return typeof (api == null ? void 0 : api.executeTasksQuery) === "function" || typeof (api == null ? void 0 : api.executeQuery) === "function";
+    const viaPlugin = (_a = this.plugin("obsidian-tasks")) == null ? void 0 : _a.api;
+    if (viaPlugin && (typeof viaPlugin.executeTasksQuery === "function" || typeof viaPlugin.executeQuery === "function")) {
+      return viaPlugin;
+    }
+    const globalApi = globalThis.tasksApiV3;
+    if (globalApi && typeof globalApi.executeTasksQuery === "function") {
+      return globalApi;
+    }
+    return null;
   }
   /** ```dataview 块：tryQueryMarkdown 拿 markdown，再用官方 MarkdownRenderer 渲染。 */
   async renderDvQuery(query, sourcePath, container, component) {
@@ -1508,17 +1518,25 @@ var QueryBridge = class {
       return false;
     }
   }
-  /** ```tasks 块：探测 Tasks 的 api 入口（M3 口径：不凭记忆，探测不到就降级）。 */
+  /** ```tasks 块：探测 Tasks 的 api 入口（插件 api 或全局 tasksApiV3），结果渲染成 markdown。 */
   async renderTasksQuery(query, sourcePath, container, component) {
-    var _a, _b;
+    var _a;
     try {
-      const api = (_a = this.plugin("obsidian-tasks")) == null ? void 0 : _a.api;
-      const run = (_b = api == null ? void 0 : api.executeTasksQuery) != null ? _b : api == null ? void 0 : api.executeQuery;
+      const api = this.tasksApi();
+      if (api === null) return false;
+      const run = (_a = api.executeTasksQuery) != null ? _a : api.executeQuery;
       if (typeof run !== "function") return false;
-      const result = await run.call(api, query, sourcePath, component, container);
+      const result = await run.call(api, query, sourcePath);
+      let markdown = "";
       if (typeof result === "string") {
-        await import_obsidian6.MarkdownRenderer.render(this.app, result, container, sourcePath, component);
+        markdown = result;
+      } else if (Array.isArray(result == null ? void 0 : result.tasks)) {
+        markdown = result.tasks.map(
+          (task) => typeof task.toMarkdown === "function" ? task.toMarkdown() : typeof task.toString === "function" ? String(task) : ""
+        ).filter((line) => line !== "").join("\n");
       }
+      if (markdown === "") return false;
+      await import_obsidian6.MarkdownRenderer.render(this.app, markdown, container, sourcePath, component);
       return true;
     } catch (e) {
       return false;
@@ -1728,6 +1746,7 @@ function renderCalendar(card, app, ctx) {
   const year = first.getFullYear();
   const month0 = first.getMonth();
   const key = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+  const inPeriod = ctx.kind === "week" ? new Set(ctx.days) : null;
   const title = card.createDiv({ cls: "qj-cal-title" });
   const yearChip = title.createEl("button", { cls: "qj-cal-chip", text: String(year) });
   yearChip.type = "button";
@@ -1761,6 +1780,7 @@ function renderCalendar(card, app, ctx) {
     for (const cell of week) {
       const el = grid.createDiv({ cls: `qj-cal-cell${cell.inMonth ? "" : " qj-cal-out"}` });
       if (!cell.inMonth) continue;
+      if (inPeriod == null ? void 0 : inPeriod.has(cell.key)) el.addClass("is-in-period");
       if (cell.key === today) el.addClass("is-today");
       el.createSpan({ cls: "qj-cal-day", text: String(cell.date.getDate()) });
       const n = (_a = done.get(cell.key)) != null ? _a : 0;
@@ -1842,18 +1862,20 @@ async function renderQueryPanel(card, app, ctx, detected) {
     card.createDiv({ cls: "qj-muted", text: t("\u6682\u65E0\u67E5\u8BE2\u5757") });
     return;
   }
+  const fallbackSource = ctx.plugin.capture.dailyPath(/* @__PURE__ */ new Date());
   const bridge = new QueryBridge(app);
   for (const block of all) {
     const wrap = card.createDiv({ cls: "qj-query-block" });
     wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
     const body = wrap.createDiv({ cls: "qj-query-body" });
+    const source = block.source !== "" ? block.source : fallbackSource;
     let ok = false;
     if (block.kind === "dataview") {
-      ok = await bridge.renderDvQuery(block.code, block.source, body, ctx.component);
+      ok = await bridge.renderDvQuery(block.code, source, body, ctx.component);
     } else if (block.kind === "dataviewjs") {
-      ok = bridge.renderDvJs(block.code, body, ctx.component, block.source);
+      ok = bridge.renderDvJs(block.code, body, ctx.component, source);
     } else {
-      ok = await bridge.renderTasksQuery(block.code, block.source, body, ctx.component);
+      ok = await bridge.renderTasksQuery(block.code, source, body, ctx.component);
     }
     if (!ok) {
       body.empty();
@@ -1988,14 +2010,9 @@ var SummaryView = class extends import_obsidian7.ItemView {
     (0, import_obsidian7.setIcon)(refresh, "refresh-cw");
     refresh.onclick = () => void this.render();
   }
-  /** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由组件自己画）。 */
+  /** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由视图统一画）。 */
   components() {
     return [
-      {
-        id: "quick-capture",
-        title: t("\u5FEB\u901F\u5F55\u5165"),
-        render: (card, ctx) => renderQuickCapture(card, ctx)
-      },
       {
         id: "task-chart",
         title: t("\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1"),
@@ -2084,6 +2101,7 @@ var SummaryView = class extends import_obsidian7.ItemView {
       editing: this.editing,
       rerender: () => void this.render()
     };
+    renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
     const defs = this.components();
     const visible = config.summaryLayout.map((id) => defs.find((d) => d.id === id)).filter((d) => d !== void 0).filter((d) => d.kinds === void 0 || d.kinds.includes(this.kind));
     const cards = body.createDiv({ cls: "qj-cards" });
@@ -2092,7 +2110,7 @@ var SummaryView = class extends import_obsidian7.ItemView {
       const wrap = cards.createDiv({ cls: "qj-card-wrap" });
       if (this.editing) this.attachEditChrome(wrap, def.id, def.title);
       const card = wrap.createDiv({ cls: "qj-card" });
-      if (def.id !== "quick-capture" && def.id !== "task-chart") {
+      if (def.id !== "task-chart") {
         card.createDiv({ cls: "qj-card-title", text: def.title });
       }
       await def.render(card, ctx, { queries });
