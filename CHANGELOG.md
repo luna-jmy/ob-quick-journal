@@ -5,6 +5,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.8.0
+
+### 变更
+
+- **查询只保留 dataview / dataviewjs**：Tasks 插件没有公开查询 API，按决定移除 tasks
+  查询类型（已保存的 tasks 查询在加载配置时自动清理）；dataview 走官方
+  `dataview.api`（executeJs / tryQueryMarkdown + MarkdownRenderer，CW 同款）
+- **速记面板顶部可收起**：常驻一条细栏（箭头 + 展开/收起），收起后工具栏与输入区
+  隐藏，内容流立即顶上来——手机端查看不再被顶部功能区挤压
+
 ## 0.7.0
 
 ### 变更
