@@ -243,13 +243,17 @@ function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, strin
 	return el;
 }
 
-/** 月历组件：年/月片可点开对应复盘笔记；周号列点开周日志；格子点开当日日志。 */
+/** 月历组件：年/月片可点开对应复盘笔记；周号列点开周日志；格子点开当日日志。
+ * 周/月视图同构（整月网格）；周视图高亮当前期间所在的那一周。 */
 export function renderCalendar(card: HTMLElement, app: App, ctx: SummaryCtx): void {
 	const config = ctx.plugin.config;
+	// 带时间部分的字符串按本地时区解析（裸 YYYY-MM-DD 会走 UTC，月初跨界周锚错月份）
 	const first = new Date(`${ctx.days[0]}T00:00:00`);
 	const year = first.getFullYear();
 	const month0 = first.getMonth();
 	const key = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+	// 周视图：高亮期间内的日期（整周）
+	const inPeriod = ctx.kind === "week" ? new Set(ctx.days) : null;
 
 	const title = card.createDiv({ cls: "qj-cal-title" });
 	const yearChip = title.createEl("button", { cls: "qj-cal-chip", text: String(year) });
@@ -286,6 +290,7 @@ export function renderCalendar(card: HTMLElement, app: App, ctx: SummaryCtx): vo
 		for (const cell of week) {
 			const el = grid.createDiv({ cls: `qj-cal-cell${cell.inMonth ? "" : " qj-cal-out"}` });
 			if (!cell.inMonth) continue;
+			if (inPeriod?.has(cell.key)) el.addClass("is-in-period");
 			if (cell.key === today) el.addClass("is-today");
 			el.createSpan({ cls: "qj-cal-day", text: String(cell.date.getDate()) });
 			const n = done.get(cell.key) ?? 0;
@@ -386,18 +391,21 @@ export async function renderQueryPanel(
 		card.createDiv({ cls: "qj-muted", text: t("暂无查询块") });
 		return;
 	}
+	// 手工查询没有源笔记路径——查询引擎需要上下文，回退到当天日日志
+	const fallbackSource = ctx.plugin.capture.dailyPath(new Date());
 	const bridge = new QueryBridge(app);
 	for (const block of all) {
 		const wrap = card.createDiv({ cls: "qj-query-block" });
 		wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
+		const source = block.source !== "" ? block.source : fallbackSource;
 		let ok = false;
 		if (block.kind === "dataview") {
-			ok = await bridge.renderDvQuery(block.code, block.source, body, ctx.component);
+			ok = await bridge.renderDvQuery(block.code, source, body, ctx.component);
 		} else if (block.kind === "dataviewjs") {
-			ok = bridge.renderDvJs(block.code, body, ctx.component, block.source);
+			ok = bridge.renderDvJs(block.code, body, ctx.component, source);
 		} else {
-			ok = await bridge.renderTasksQuery(block.code, block.source, body, ctx.component);
+			ok = await bridge.renderTasksQuery(block.code, source, body, ctx.component);
 		}
 		if (!ok) {
 			body.empty();

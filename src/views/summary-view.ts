@@ -144,14 +144,9 @@ export class SummaryView extends ItemView {
 		refresh.onclick = () => void this.render();
 	}
 
-	/** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由组件自己画）。 */
+	/** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由视图统一画）。 */
 	private components(): ComponentDef[] {
 		return [
-			{
-				id: "quick-capture",
-				title: t("快速录入"),
-				render: (card, ctx) => renderQuickCapture(card, ctx),
-			},
 			{
 				id: "task-chart",
 				title: t("任务完成统计"),
@@ -249,6 +244,9 @@ export class SummaryView extends ItemView {
 			rerender: () => void this.render(),
 		};
 
+		// 快速录入固定为顶端整行条（不卡片化、不进编辑布局）
+		renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
+
 		const defs = this.components();
 		const visible = config.summaryLayout
 			.map((id) => defs.find((d) => d.id === id))
@@ -262,8 +260,8 @@ export class SummaryView extends ItemView {
 			const wrap = cards.createDiv({ cls: "qj-card-wrap" });
 			if (this.editing) this.attachEditChrome(wrap, def.id, def.title);
 			const card = wrap.createDiv({ cls: "qj-card" });
-			// 标题统一由注册表画（快速录入条与任务图自带表头，不加）
-			if (def.id !== "quick-capture" && def.id !== "task-chart") {
+			// 标题统一由注册表画（任务图自带表头，不加）
+			if (def.id !== "task-chart") {
 				card.createDiv({ cls: "qj-card-title", text: def.title });
 			}
 			await def.render(card, ctx, { queries });

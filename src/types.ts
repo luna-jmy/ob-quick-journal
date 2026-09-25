@@ -158,9 +158,8 @@ export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
 	annual: { dir: "500 Journal/510 Annual", sections: [] },
 };
 
-/** 汇总视图的组件 id（顺序即默认布局）。 */
+/** 汇总视图的组件 id（顺序即默认布局；快速录入固定为顶端整行条，不在此列）。 */
 export const DEFAULT_SUMMARY_LAYOUT = [
-	"quick-capture",
 	"task-chart",
 	"checkin",
 	"trend",

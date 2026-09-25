@@ -75,6 +75,13 @@
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 	gap: var(--size-4-3);
+	align-items: stretch;
+}
+
+.qj-card-wrap {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
 }
 
 .qj-card {
@@ -82,6 +89,9 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
 	padding: var(--size-4-3);
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
 }
 
 .qj-card-title {
@@ -579,12 +589,15 @@
 
 .qj-hm-week {
 	display: grid;
-	grid-template-columns: repeat(7, 1fr);
+	grid-template-columns: repeat(7, minmax(0, 1fr));
 	gap: var(--size-2-2);
+	min-width: 0;
 }
 
 .qj-hm-big {
 	aspect-ratio: 1;
+	min-width: 0;
+	overflow: hidden;
 	border-radius: var(--radius-m);
 	display: flex;
 	flex-direction: column;
@@ -600,19 +613,22 @@
 }
 
 .qj-hm-big-count {
-	font-size: 1.6em;
+	font-size: 1.3em;
 	font-weight: var(--font-bold);
 	color: var(--text-normal);
 }
 
 .qj-hm-grid {
 	display: grid;
-	grid-template-columns: repeat(7, 1fr);
+	grid-template-columns: repeat(7, minmax(0, 1fr));
 	gap: 2px;
+	min-width: 0;
 }
 
 .qj-hm-cell-m {
 	aspect-ratio: 1;
+	min-width: 0;
+	overflow: hidden;
 	border-radius: var(--radius-s);
 	display: flex;
 	flex-direction: column;
@@ -743,6 +759,15 @@
 }
 
 .qj-cal-cell.is-today {
+	border-color: var(--interactive-accent);
+}
+
+/* 周视图的月历：当前期间所在周的格子底色提示 */
+.qj-cal-cell.is-in-period {
+	background: var(--background-modifier-hover);
+}
+
+.qj-cal-cell.is-in-period.is-today {
 	border-color: var(--interactive-accent);
 }
 

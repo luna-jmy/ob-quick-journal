@@ -20,8 +20,24 @@ export class QueryBridge {
 	}
 
 	get tasksAvailable(): boolean {
-		const api = this.plugin("obsidian-tasks")?.api;
-		return typeof api?.executeTasksQuery === "function" || typeof api?.executeQuery === "function";
+		return this.tasksApi() !== null;
+	}
+
+	/** Tasks 的 API 入口：插件实例 api 或全局 tasksApiV3（探测不到返回 null）。 */
+	private tasksApi(): any | null {
+		const viaPlugin = this.plugin("obsidian-tasks")?.api;
+		if (
+			viaPlugin &&
+			(typeof viaPlugin.executeTasksQuery === "function" ||
+				typeof viaPlugin.executeQuery === "function")
+		) {
+			return viaPlugin;
+		}
+		const globalApi = (globalThis as any).tasksApiV3;
+		if (globalApi && typeof globalApi.executeTasksQuery === "function") {
+			return globalApi;
+		}
+		return null;
 	}
 
 	/** ```dataview 块：tryQueryMarkdown 拿 markdown，再用官方 MarkdownRenderer 渲染。 */
@@ -59,7 +75,7 @@ export class QueryBridge {
 		}
 	}
 
-	/** ```tasks 块：探测 Tasks 的 api 入口（M3 口径：不凭记忆，探测不到就降级）。 */
+	/** ```tasks 块：探测 Tasks 的 api 入口（插件 api 或全局 tasksApiV3），结果渲染成 markdown。 */
 	async renderTasksQuery(
 		query: string,
 		sourcePath: string,
@@ -67,13 +83,29 @@ export class QueryBridge {
 		component: Component,
 	): Promise<boolean> {
 		try {
-			const api = this.plugin("obsidian-tasks")?.api;
-			const run = api?.executeTasksQuery ?? api?.executeQuery;
+			const api = this.tasksApi();
+			if (api === null) return false;
+			const run = api.executeTasksQuery ?? api.executeQuery;
 			if (typeof run !== "function") return false;
-			const result = await run.call(api, query, sourcePath, component, container);
+			const result = await run.call(api, query, sourcePath);
+			let markdown = "";
 			if (typeof result === "string") {
-				await MarkdownRenderer.render(this.app, result, container, sourcePath, component);
+				markdown = result;
+			} else if (Array.isArray(result?.tasks)) {
+				// API v3 返回 { tasks: Task[] }：用任务对象自带的 markdown 序列化
+				markdown = result.tasks
+					.map((task: any) =>
+						typeof task.toMarkdown === "function"
+							? task.toMarkdown()
+							: typeof task.toString === "function"
+								? String(task)
+								: "",
+					)
+					.filter((line: string) => line !== "")
+					.join("\n");
 			}
+			if (markdown === "") return false;
+			await MarkdownRenderer.render(this.app, markdown, container, sourcePath, component);
 			return true;
 		} catch {
 			return false;
