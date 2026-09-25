@@ -43,6 +43,11 @@ export const EN: Record<string, string> = {
 	"昨天": "Yesterday",
 	"暂无内容，先去记一条": "Nothing here yet — capture something first",
 	"没有开启内容汇总面板的标题区": "No heading sections are enabled for the capture feed yet",
+	"编辑": "Edit",
+	"保存": "Save",
+	"打开日志": "Open note",
+	"删除这条记录？": "Delete this entry?",
+	"内容已变化，请刷新后重试": "This entry changed since the feed loaded — refresh and try again",
 	"周": "Week",
 	"月": "Month",
 	"年": "Year",
@@ -94,6 +99,10 @@ export const EN: Record<string, string> = {
 	"数据": "Data",
 	"文本": "Text",
 	"列表": "List",
+	"段落": "Paragraph",
+	"自动添加时间戳": "Auto timestamp",
+	"记录时自动加时间戳前缀（HH:mm），速记面板会解析并显示":
+		"Prefix entries with HH:mm on capture; the capture feed parses and shows it",
 	"命令在重载插件后按新配置生效；工具栏按钮与汇总视图即时生效。":
 		"Commands follow the new configuration after reloading the plugin; the toolbar button and the summary view apply immediately.",
 };

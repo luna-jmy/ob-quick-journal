@@ -13,16 +13,36 @@ export interface SectionEntry {
 	/** 所属日志日（YYYY-MM-DD） */
 	date: string;
 	sectionId: string;
-	kind: "line" | "field";
+	kind: "line" | "field" | "paragraph";
 	/** field 条目的展示名 */
 	label?: string;
-	/** 正文（任务行已带状态符号前缀） */
+	/** 记录时间（内容前缀的 HH:mm，开启自动时间戳时有） */
+	time?: string;
+	/** 正文（任务行已带状态符号前缀；段落为整段） */
 	text: string;
+	/** 可编辑内容（line：去掉列表标记与时间戳；field/paragraph：同 text） */
+	content?: string;
+	/** 源行号（line/field 有；paragraph 无） */
+	lineIndex?: number;
+	/** 源行原文（写回前的过期校验用） */
+	raw?: string;
+	/** line：列表标记前缀（`- ` / `- [ ] ` 等，重建行时拼回） */
+	prefix?: string;
+	/** field：字段键 */
+	key?: string;
 }
 
 const BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
 const LIST_ITEM_RE = /^\s*[-*]\s+(.*)$/;
 const TASK_ITEM_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+const TIMESTAMP_RE = /^(\d{1,2}:\d{2})(?::\d{2})?\s+/;
+
+/** 剥离内容前的 HH:mm 时间戳（开启自动时间戳的写入带它）。 */
+function splitTimestamp(text: string): { time?: string; text: string } {
+	const m = TIMESTAMP_RE.exec(text);
+	if (!m) return { text };
+	return { time: m[1], text: text.slice(m[0].length) };
+}
 
 function taskPrefix(status: string): string {
 	if (status === " ") return "☐";
@@ -43,6 +63,27 @@ export function collectEntries(
 		if (headingIndex < 0) continue;
 		const { start, end } = sectionRange(lines, headingIndex);
 		let inFence = false;
+
+		if (section.type === "paragraph") {
+			// 一天一条：区段内的非空正文行合成一个条目（跳过代码块与注释）
+			const content: string[] = [];
+			for (let i = start; i < end; i++) {
+				const line = lines[i];
+				if (line.trimStart().startsWith("```")) {
+					inFence = !inFence;
+					continue;
+				}
+				if (inFence) continue;
+				if (line.trimStart().startsWith("%%")) continue;
+				if (line.trim() !== "") content.push(line.trim());
+			}
+			if (content.length === 0) continue;
+			const joined = content.join("\n");
+			const ts = splitTimestamp(joined);
+			out.push({ date, sectionId: section.id, kind: "paragraph", ...ts });
+			continue;
+		}
+
 		for (let i = start; i < end; i++) {
 			const line = lines[i];
 			if (line.trimStart().startsWith("```")) {
@@ -64,6 +105,10 @@ export function collectEntries(
 					kind: "field",
 					label: def?.label ?? field[1].trim(),
 					text: value,
+					content: value,
+					key: field[1].trim(),
+					lineIndex: i,
+					raw: line,
 				});
 				continue;
 			}
@@ -71,17 +116,34 @@ export function collectEntries(
 			const task = TASK_ITEM_RE.exec(line);
 			if (task) {
 				if (task[2].trim() === "") continue;
+				const ts = splitTimestamp(task[2].trim());
 				out.push({
 					date,
 					sectionId: section.id,
 					kind: "line",
-					text: `${taskPrefix(task[1])} ${task[2].trim()}`,
+					...ts,
+					text: `${taskPrefix(task[1])} ${ts.text}`,
+					content: ts.text,
+					prefix: line.slice(0, line.length - task[2].length),
+					lineIndex: i,
+					raw: line,
 				});
 				continue;
 			}
 			const item = LIST_ITEM_RE.exec(line);
 			if (item && item[1].trim() !== "") {
-				out.push({ date, sectionId: section.id, kind: "line", text: item[1].trim() });
+				const ts = splitTimestamp(item[1].trim());
+				out.push({
+					date,
+					sectionId: section.id,
+					kind: "line",
+					...ts,
+					content: ts.text,
+					text: ts.text,
+					prefix: line.slice(0, line.length - item[1].length),
+					lineIndex: i,
+					raw: line,
+				});
 			}
 		}
 	}

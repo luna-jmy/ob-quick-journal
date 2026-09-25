@@ -16,6 +16,7 @@ const TYPE_LABEL: Record<SectionType, string> = {
 	data: "数据",
 	text: "文本",
 	list: "列表",
+	paragraph: "段落",
 };
 
 export class QJSettingTab extends PluginSettingTab {
@@ -151,7 +152,7 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			})
 			.addDropdown((drop) => {
-				for (const type of ["checkin", "data", "text", "list"] as SectionType[]) {
+				for (const type of ["checkin", "data", "text", "list", "paragraph"] as SectionType[]) {
 					drop.addOption(type, t(TYPE_LABEL[type]));
 				}
 				drop.setValue(section.type);
@@ -170,7 +171,7 @@ export class QJSettingTab extends PluginSettingTab {
 				}),
 			);
 
-		if (section.type === "list" || section.type === "text") {
+		if (section.type === "list" || section.type === "text" || section.type === "paragraph") {
 			new Setting(container)
 				.setName(t("开启内容汇总面板"))
 				.setDesc(t("在速记面板里聚合显示该标题区的内容"))
@@ -178,8 +179,24 @@ export class QJSettingTab extends PluginSettingTab {
 					toggle.setValue(section.panel === true).onChange(async (value) => {
 						section.panel = value ? true : undefined;
 						await this.plugin.saveConfig();
+						this.display();
 					}),
 				);
+		}
+
+		if (section.type === "list" || section.type === "paragraph") {
+			// 时间戳只在面板开启后可用（面板负责解析显示）
+			new Setting(container)
+				.setName(t("自动添加时间戳"))
+				.setDesc(t("记录时自动加时间戳前缀（HH:mm），速记面板会解析并显示"))
+				.addToggle((toggle) => {
+					toggle.setDisabled(section.panel !== true);
+					toggle.setValue(section.timestamp === true);
+					toggle.onChange(async (value) => {
+						section.timestamp = value ? true : undefined;
+						await this.plugin.saveConfig();
+					});
+				});
 		}
 
 		if (section.type === "list") {

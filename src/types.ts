@@ -8,7 +8,7 @@
  * 范围仅日日志；周/月/年复盘另行开发，不在本模型内。
  */
 
-export type SectionType = "checkin" | "data" | "text" | "list";
+export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph";
 
 export interface SectionField {
 	/** 字段行键，可含 emoji（前缀如 💊medicine、后缀如 weight⚖️） */
@@ -29,8 +29,10 @@ export interface JournalSection {
 	fields: SectionField[];
 	/** list 类型用：追加行模板，默认 `- {{value}}`（GTD 等任务区可设 `- [ ] {{value}}`） */
 	lineTemplate?: string;
-	/** 文本/列表类型可开：在速记面板里聚合该标题区的内容 */
+	/** 文本/列表/段落类型可开：在速记面板里聚合该标题区的内容 */
 	panel?: boolean;
+	/** 面板开启后可用：写入时自动加 HH:mm 时间戳前缀，面板解析显示记录时间 */
+	timestamp?: boolean;
 }
 
 export interface QJConfig {
@@ -93,6 +95,7 @@ export const DEFAULT_SECTIONS: JournalSection[] = [
 		type: "list",
 		fields: [],
 		panel: true,
+		timestamp: true,
 	},
 ];
 
@@ -107,7 +110,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null;
 }
 
-const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list"];
+const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph"];
 
 function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | null {
 	if (!isRecord(raw)) return null;
@@ -126,6 +129,7 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 		: [];
 	const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : undefined;
 	const panel = raw.panel === true ? true : undefined;
+	const timestamp = raw.timestamp === true ? true : undefined;
 	return {
 		id,
 		heading,
@@ -133,6 +137,7 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 		fields,
 		...(lineTemplate ? { lineTemplate } : {}),
 		...(panel ? { panel } : {}),
+		...(timestamp ? { timestamp } : {}),
 	};
 }
 

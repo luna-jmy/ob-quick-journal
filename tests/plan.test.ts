@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyPlan, planAppend, planFieldFill } from "../src/capture/plan";
+import {
+	applyPlan,
+	planAppend,
+	planDeleteLineAt,
+	planEditLineAt,
+	planFieldFill,
+	planParagraph,
+} from "../src/capture/plan";
 
 const NOTE = [
 	"# 2026-09-25 日志",
@@ -101,5 +108,96 @@ describe("planAppend", () => {
 		const out = applyPlan(note, plan);
 		expect(out).toContain("- 新灵感");
 		expect(out).toContain("想法A");
+	});
+});
+
+describe("planParagraph（一天一条整段文字）", () => {
+	it("空区段 → 标题下插入整段，existingContent 为空", () => {
+		const note = "# 日志\n## 今日随笔\n\n## 下一个标题\n";
+		const plan = planParagraph(note.split("\n"), {
+			heading: "## 今日随笔",
+			headingMissingCreates: true,
+			text: "第一行\n第二行",
+		});
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(plan.existingContent).toBe("");
+		expect(plan.creates.map((c) => c.line)).toEqual(["第一行", "第二行"]);
+		const out = applyPlan(note, plan).split("\n");
+		expect(out.indexOf("第一行")).toBe(2);
+		expect(out.indexOf("第二行")).toBe(3);
+	});
+
+	it("已有内容 → 整段删除重建，existingContent 给预览（供覆盖确认）", () => {
+		const note = "# 日志\n## 今日随笔\n旧的第一行\n旧的第二行\n\n## 下一个标题\n";
+		const plan = planParagraph(note.split("\n"), {
+			heading: "## 今日随笔",
+			headingMissingCreates: true,
+			text: "新的整段",
+		});
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(plan.existingContent).toBe("旧的第一行");
+		expect(plan.removeLines).toEqual({ start: 2, end: 5 });
+		const out = applyPlan(note, plan);
+		expect(out).not.toContain("旧的");
+		expect(out).toContain("## 今日随笔\n新的整段");
+	});
+
+	it("标题缺失 → 创建标题并写入", () => {
+		const plan = planParagraph(["# 日志"], {
+			heading: "## 今日随笔",
+			headingMissingCreates: true,
+			text: "一段",
+		});
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(plan.createHeading?.heading).toBe("## 今日随笔");
+		expect(applyPlan("# 日志", plan)).toContain("## 今日随笔\n一段");
+	});
+
+	it("空文本（清空）→ 只删不写", () => {
+		const note = "# 日志\n## 今日随笔\n旧内容\n\n## 下一个\n";
+		const plan = planParagraph(note.split("\n"), {
+			heading: "## 今日随笔",
+			headingMissingCreates: false,
+			text: "",
+		});
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(applyPlan(note, plan)).not.toContain("旧内容");
+	});
+});
+
+describe("planEditLineAt / planDeleteLineAt（条目级写回）", () => {
+	it("原位替换单行", () => {
+		const note = "# 日志\n## 灵感\n- 08:44 旧的\n- 其他";
+		const plan = planEditLineAt(2, "- 08:44 新的");
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(applyPlan(note, plan)).toBe("# 日志\n## 灵感\n- 08:44 新的\n- 其他");
+	});
+
+	it("删除单行", () => {
+		const note = "# 日志\n## 灵感\n- 08:44 要删的\n- 留下";
+		const plan = planDeleteLineAt(2);
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		expect(applyPlan(note, plan)).toBe("# 日志\n## 灵感\n- 留下");
+	});
+});
+
+describe("applyPlan 多行插入顺序", () => {
+	it("文档中部的多个锚点：最终顺序与计划一致（回归：高位锚点先插不推挤低位）", () => {
+		const note = "A\nB\nC\nD";
+		const plan = {
+			status: "ok" as const,
+			edits: [],
+			creates: [
+				{ afterLineIndex: 1, line: "B1" },
+				{ afterLineIndex: 2, line: "C1" },
+			],
+		};
+		expect(applyPlan(note, plan)).toBe("A\nB\nB1\nC\nC1\nD");
 	});
 });

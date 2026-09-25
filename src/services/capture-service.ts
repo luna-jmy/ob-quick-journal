@@ -5,15 +5,26 @@
 
 import { TFile, type App } from "obsidian";
 import type { JournalSection, QJConfig } from "../types";
-import { planAppend, planFieldFill, type WritePlan } from "../capture/plan";
+import {
+	planAppend,
+	planDeleteLineAt,
+	planEditLineAt,
+	planFieldFill,
+	planParagraph,
+	type WritePlan,
+} from "../capture/plan";
 import { targetNotePath } from "../capture/variables";
 import { dailySkeleton } from "../capture/skeleton";
+import { renderFieldLine } from "../parse/field-lines";
+import type { SectionEntry } from "../parse/section-entries";
 import { applyPlanToFile, ensureNote, readNoteText } from "./file-writer";
 
 export type CaptureResult =
 	| { ok: true; path: string; created: boolean; writtenLines: number }
 	| { ok: false; reason: "overwrite"; keys: string[]; path: string }
 	| { ok: false; reason: "error"; message: string };
+
+export type EntryWriteResult = { ok: true } | { ok: false; message: string };
 
 export class CaptureService {
 	constructor(
@@ -45,12 +56,24 @@ export class CaptureService {
 		}
 
 		let plan: WritePlan;
-		if (section.type === "list") {
-			const template = section.lineTemplate ?? "- {{value}}";
-			const line = template.replaceAll("{{value}}", payload.lineValue ?? "");
-			if (payload.lineValue === undefined || payload.lineValue.trim() === "" || line.includes("{{")) {
+		if (section.type === "paragraph") {
+			if (payload.lineValue === undefined || payload.lineValue.trim() === "") {
 				return { ok: false, reason: "error", message: "empty value" };
 			}
+			plan = planParagraph(text.split(/\r?\n/), {
+				heading: section.heading,
+				headingMissingCreates: true,
+				text: this.withTimestamp(section, payload.lineValue, now),
+			});
+		} else if (section.type === "list") {
+			if (payload.lineValue === undefined || payload.lineValue.trim() === "") {
+				return { ok: false, reason: "error", message: "empty value" };
+			}
+			const template = section.lineTemplate ?? "- {{value}}";
+			const line = template.replaceAll(
+				"{{value}}",
+				this.withTimestamp(section, payload.lineValue, now),
+			);
 			plan = planAppend(text.split(/\r?\n/), {
 				heading: section.heading,
 				headingMissingCreates: true,
@@ -74,6 +97,9 @@ export class CaptureService {
 			return { ok: false, reason: "error", message: `${plan.reason}: ${plan.heading}` };
 		}
 		const overwrites = plan.edits.filter((e) => e.previousValue !== "").map((e) => e.key);
+		if (plan.existingContent !== undefined && plan.existingContent !== "") {
+			overwrites.push(plan.existingContent);
+		}
 		if (overwrites.length > 0 && !opts.overwrite) {
 			return { ok: false, reason: "overwrite", keys: overwrites, path };
 		}
@@ -84,5 +110,81 @@ export class CaptureService {
 			created,
 			writtenLines: plan.edits.length + plan.creates.length,
 		};
+	}
+
+	/** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。 */
+	private withTimestamp(section: JournalSection, value: string, now: Date): string {
+		if (section.timestamp !== true) return value;
+		const hh = String(now.getHours()).padStart(2, "0");
+		const mm = String(now.getMinutes()).padStart(2, "0");
+		return `${hh}:${mm} ${value}`;
+	}
+
+	// ── 速记面板的条目级写回（编辑 / 删除，不跳回日志） ─────────────────────
+
+	/** 编辑一条流条目：line/field 原位改行（保留标记与时间戳），paragraph 整段重写。 */
+	async editEntry(section: JournalSection, entry: SectionEntry, content: string): Promise<EntryWriteResult> {
+		return this.mutateEntry(section, entry, content);
+	}
+
+	/** 删除一条流条目：line 删行，field 清值回空值行，paragraph 清空整段。 */
+	async deleteEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
+		return this.mutateEntry(section, entry, null);
+	}
+
+	private async mutateEntry(
+		section: JournalSection,
+		entry: SectionEntry,
+		content: string | null,
+	): Promise<EntryWriteResult> {
+		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
+		let text: string;
+		try {
+			text = await readNoteText(this.app, path);
+		} catch {
+			return { ok: false, message: `note not found: ${entry.date}` };
+		}
+		const lines = text.split(/\r?\n/);
+
+		let plan: WritePlan;
+		if (entry.kind === "paragraph") {
+			const body =
+				content === null || content.trim() === ""
+					? ""
+					: entry.time
+						? `${entry.time} ${content}`
+						: content;
+			plan = planParagraph(lines, {
+				heading: section.heading,
+				headingMissingCreates: false,
+				text: body,
+			});
+		} else {
+			// 行级条目：先做过期校验（渲染后笔记被改过就拒绝，防错行）
+			if (
+				entry.lineIndex === undefined ||
+				entry.lineIndex >= lines.length ||
+				lines[entry.lineIndex] !== entry.raw
+			) {
+				return { ok: false, message: "stale-line" };
+			}
+			if (content === null) {
+				plan =
+					entry.kind === "field"
+						? planEditLineAt(entry.lineIndex, renderFieldLine(entry.key ?? "", ""))
+						: planDeleteLineAt(entry.lineIndex);
+			} else if (entry.kind === "field") {
+				plan = planEditLineAt(entry.lineIndex, renderFieldLine(entry.key ?? "", content));
+			} else {
+				const line = `${entry.prefix ?? ""}${entry.time ? `${entry.time} ` : ""}${content}`;
+				plan = planEditLineAt(entry.lineIndex, line);
+			}
+		}
+
+		if (plan.status === "error") {
+			return { ok: false, message: `${plan.reason}: ${plan.heading ?? section.heading}` };
+		}
+		await applyPlanToFile(this.app, path, plan);
+		return { ok: true };
 	}
 }

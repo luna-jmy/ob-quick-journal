@@ -29,11 +29,11 @@ export class CaptureModal extends Modal {
 		this.titleEl.setText(this.title);
 		const form = this.contentEl.createDiv({ cls: "qj-form" });
 
-		if (this.type === "list") {
+		if (this.type === "list" || this.type === "paragraph") {
 			const row = form.createDiv({ cls: "qj-field" });
 			row.createEl("label", { cls: "qj-field-label", text: t("内容") });
 			const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
-			input.rows = 2;
+			input.rows = this.type === "paragraph" ? 6 : 2;
 			input.onchange = () => (this.lineValue = input.value);
 		} else {
 			for (const field of this.fields) {

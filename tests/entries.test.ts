@@ -69,3 +69,46 @@ describe("标题区内容条目抽取", () => {
 		expect(missing).toEqual([]);
 	});
 });
+
+describe("时间戳与段落", () => {
+	const NOTE = [
+		"# 2026-09-25 日志",
+		"## 💡 灵感与思考",
+		"- 08:44 早上想到的",
+		"- [ ] 09:30 要做的任务",
+		"## 今日随笔",
+		"21:05 今天写了一整段，",
+		"第二行继续。",
+	].join("\n");
+	const SECTIONS: JournalSection[] = [
+		{ id: "ideas", heading: "## 💡 灵感与思考", type: "list", fields: [] },
+		{ id: "diary", heading: "## 今日随笔", type: "paragraph", fields: [] },
+	];
+
+	it("列表条目解析 HH:mm 时间戳（普通行与任务行），并携带行定位信息", () => {
+		const entries = collectEntries("2026-09-25", NOTE.split("\n"), SECTIONS);
+		const ideas = entries.filter((e) => e.sectionId === "ideas");
+		expect(ideas[0]).toMatchObject({ time: "08:44", text: "早上想到的" });
+		expect(ideas[1]).toMatchObject({ time: "09:30", text: "☐ 要做的任务" });
+		// 编辑写回需要：行号、原文、前缀（重建 `- ` / `- [ ] ` + 时间戳）、可编辑内容
+		expect(ideas[0]).toMatchObject({
+			lineIndex: 2,
+			raw: "- 08:44 早上想到的",
+			prefix: "- ",
+			content: "早上想到的",
+		});
+		expect(ideas[1].prefix).toBe("- [ ] ");
+		expect(ideas[1].content).toBe("要做的任务");
+	});
+
+	it("段落一天一条：整段合成一个条目，前缀时间戳被剥离", () => {
+		const entries = collectEntries("2026-09-25", NOTE.split("\n"), SECTIONS);
+		const diary = entries.filter((e) => e.sectionId === "diary");
+		expect(diary).toHaveLength(1);
+		expect(diary[0]).toMatchObject({
+			kind: "paragraph",
+			time: "21:05",
+			text: "今天写了一整段，\n第二行继续。",
+		});
+	});
+});

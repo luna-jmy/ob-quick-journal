@@ -17,6 +17,8 @@ import type QuickJournalPlugin from "../main";
 import type { JournalSection } from "../types";
 import { VaultIndex } from "../services/vault-index";
 import type { SectionEntry } from "../parse/section-entries";
+import { ConfirmModal } from "../ui/confirm-modal";
+import { EntryEditModal } from "../ui/entry-edit-modal";
 import { dateKey } from "../periods/period";
 import { t } from "../i18n";
 
@@ -93,25 +95,26 @@ export class PanelView extends ItemView {
 
 	private panelSections(): JournalSection[] {
 		return this.plugin.config.sections.filter(
-			(s) => s.panel === true && (s.type === "text" || s.type === "list"),
+			(s) => s.panel === true && (s.type === "text" || s.type === "list" || s.type === "paragraph"),
 		);
 	}
 
-	private listSections(): JournalSection[] {
-		return this.panelSections().filter((s) => s.type === "list");
+	/** 输入条可直发的目标：列表（追加）与段落（一天一条，覆盖需确认）。 */
+	private writableSections(): JournalSection[] {
+		return this.panelSections().filter((s) => s.type === "list" || s.type === "paragraph");
 	}
 
 	private renderInput(root: HTMLElement): void {
-		const lists = this.listSections();
-		if (lists.length === 0) return;
-		if (!lists.some((s) => s.id === this.targetId)) {
-			this.targetId = lists[0].id;
+		const targets = this.writableSections();
+		if (targets.length === 0) return;
+		if (!targets.some((s) => s.id === this.targetId)) {
+			this.targetId = targets[0].id;
 		}
 
 		const wrap = root.createDiv({ cls: "qj-panel-input" });
 		const dropdown = new DropdownComponent(wrap);
 		dropdown.addOptions(
-			Object.fromEntries(lists.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
+			Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
 		);
 		dropdown.setValue(this.targetId);
 		dropdown.onChange((value) => (this.targetId = value));
@@ -137,9 +140,20 @@ export class PanelView extends ItemView {
 	private async send(): Promise<void> {
 		const value = this.inputEl?.value.trim() ?? "";
 		if (value === "") return;
-		const section = this.listSections().find((s) => s.id === this.targetId);
+		const section = this.writableSections().find((s) => s.id === this.targetId);
 		if (!section) return;
-		const result = await this.plugin.capture.performSection(section, { values: {}, lineValue: value }, { overwrite: false });
+		if (section.type === "paragraph") {
+			// 段落一天一条：已有内容时走确认弹窗（performCapture 里带 Notice 与确认流）
+			await this.plugin.performCapture(section, { values: {}, lineValue: value }, false);
+			if (this.inputEl) this.inputEl.value = "";
+			await this.loadFeed();
+			return;
+		}
+		const result = await this.plugin.capture.performSection(
+			section,
+			{ values: {}, lineValue: value },
+			{ overwrite: false },
+		);
 		if (result.ok) {
 			if (this.inputEl) this.inputEl.value = "";
 			await this.loadFeed();
@@ -178,31 +192,95 @@ export class PanelView extends ItemView {
 			return;
 		}
 
+		const sections = this.panelSections();
 		const sectionName = new Map(
-			this.panelSections().map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]),
+			sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]),
 		);
 		const byDate = new Map<string, SectionEntry[]>();
 		for (const entry of this.entries) {
 			if (!byDate.has(entry.date)) byDate.set(entry.date, []);
 			byDate.get(entry.date)!.push(entry);
 		}
-		const index = new VaultIndex(this.app, this.plugin.config.dailyDir);
 
 		for (const date of [...byDate.keys()].sort().reverse()) {
 			const day = feed.createDiv({ cls: "qj-feed-day" });
 			day.createSpan({ cls: "qj-feed-day-label", text: this.dayLabel(date) });
 			for (const entry of byDate.get(date)!) {
+				const section = sections.find((s) => s.id === entry.sectionId);
+				if (!section) continue;
 				const item = day.createDiv({ cls: "qj-feed-item" });
-				const meta = item.createDiv({ cls: "qj-feed-meta" });
+
+				const head = item.createDiv({ cls: "qj-feed-head" });
+				const meta = head.createDiv({ cls: "qj-feed-meta" });
 				meta.createSpan({ text: sectionName.get(entry.sectionId) ?? "" });
 				if (entry.label) meta.createSpan({ cls: "qj-feed-label", text: entry.label });
+				if (entry.time) meta.createSpan({ cls: "qj-feed-time", text: entry.time });
+
+				const actions = head.createDiv({ cls: "qj-feed-actions" });
+				this.actionButton(actions, "pencil", t("编辑"), () => this.editEntry(section, entry));
+				this.actionButton(actions, "trash-2", t("删除"), () => this.deleteEntry(section, entry));
+				this.actionButton(actions, "arrow-up-right", t("打开日志"), () => this.jumpTo(date));
+
 				item.createDiv({ cls: "qj-feed-text", text: entry.text });
-				item.onclick = () => {
-					const file = index.dailyFile(date);
-					if (file) void this.app.workspace.getLeaf(false).openFile(file);
-				};
 			}
 		}
+	}
+
+	private actionButton(parent: HTMLElement, icon: string, label: string, onClick: () => void): void {
+		const btn = parent.createEl("button", { cls: "qj-feed-btn" });
+		btn.type = "button";
+		btn.setAttribute("aria-label", label);
+		setIcon(btn, icon);
+		btn.onclick = (evt) => {
+			evt.stopPropagation();
+			onClick();
+		};
+	}
+
+	private jumpTo(date: string): void {
+		const file = new VaultIndex(this.app, this.plugin.config.dailyDir).dailyFile(date);
+		if (file) void this.app.workspace.getLeaf(false).openFile(file);
+	}
+
+	private editEntry(section: JournalSection, entry: SectionEntry): void {
+		new EntryEditModal(
+			this.app,
+			section.heading.replace(/^#+\s*/, ""),
+			entry.content ?? entry.text,
+			entry.kind !== "line",
+			(content) => {
+				void (async () => {
+					const result = await this.plugin.capture.editEntry(section, entry, content);
+					if (result.ok) {
+						await this.loadFeed();
+					} else {
+						new Notice(this.entryError(result.message));
+					}
+				})();
+			},
+		).open();
+	}
+
+	private deleteEntry(section: JournalSection, entry: SectionEntry): void {
+		new ConfirmModal(
+			this.app,
+			t("删除这条记录？"),
+			entry.text.slice(0, 120),
+			async () => {
+				const result = await this.plugin.capture.deleteEntry(section, entry);
+				if (result.ok) {
+					await this.loadFeed();
+				} else {
+					new Notice(this.entryError(result.message));
+				}
+			},
+			t("删除"),
+		).open();
+	}
+
+	private entryError(message: string): string {
+		if (message === "stale-line") return t("内容已变化，请刷新后重试");
+		return `${t("写入失败")}: ${message}`;
 	}
 
 	private dayLabel(date: string): string {

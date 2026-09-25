@@ -363,11 +363,53 @@
 .qj-feed-item {
 	padding: var(--size-2-2) var(--size-2-3);
 	border-radius: var(--radius-s);
-	cursor: pointer;
 }
 
 .qj-feed-item:hover {
 	background: var(--background-modifier-hover);
+}
+
+.qj-feed-head {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+}
+
+.qj-feed-actions {
+	margin-left: auto;
+	display: flex;
+	gap: var(--size-1-1, 2px);
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.qj-feed-item:hover .qj-feed-actions,
+.qj-feed-actions:focus-within {
+	opacity: 1;
+}
+
+/* 触屏没有 hover：指针粗糙时按钮常显 */
+@media (hover: none) {
+	.qj-feed-actions {
+		opacity: 1;
+	}
+}
+
+.qj-feed-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-1-1, 2px) var(--size-1-2, 4px);
+	background: transparent;
+	border: none;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.qj-feed-btn:hover {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
 }
 
 .qj-feed-meta {
@@ -378,8 +420,13 @@
 	margin-bottom: var(--size-1-1, 2px);
 }
 
-.qj-feed-label::before {
+.qj-feed-label::before,
+.qj-feed-time::before {
 	content: "· ";
+}
+
+.qj-feed-time {
+	font-variant-numeric: tabular-nums;
 }
 
 .qj-feed-text {

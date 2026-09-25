@@ -11,6 +11,7 @@ const TYPE_ICON: Record<SectionType, string> = {
 	data: "line-chart",
 	text: "feather",
 	list: "list-plus",
+	paragraph: "align-left",
 };
 
 export class ActionPickerModal extends Modal {

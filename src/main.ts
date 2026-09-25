@@ -95,7 +95,8 @@ export default class QuickJournalPlugin extends Plugin {
 		).open();
 	}
 
-	private async performCapture(
+	/** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */
+	async performCapture(
 		section: JournalSection,
 		payload: { values: Record<string, string>; lineValue?: string },
 		overwrite: boolean,
