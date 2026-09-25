@@ -5,6 +5,24 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.7.0
+
+### 变更
+
+- **查询组件去掉全部预设**：不再自动识别日志里的查询块，只渲染用户手动添加的
+  （此前日志里的大量查询被当作原文显示，正是问题来源）
+- **tasks 查询改原生执行**：Tasks 插件没有任何公开的查询执行 API（主分支仅 apiV1），
+  常用筛选子集改为插件内实现——`path / filename includes（not）`、`tags include`、
+  `done / not done`、`status.type is (not)`；出现不支持的行整体降级说明（不静默忽略）；
+  结果可点击跳转源笔记
+- **dataview / dataviewjs 对齐 Custom Workspace 的做法**：`executeJs`（dataviewjs）与
+  `tryQueryMarkdown` + MarkdownRenderer（dataview），探测不到显示需要 Dataview
+
+### 未验证
+
+- 原生 tasks 子集在大库上的性能（查询请带 `path includes` 缩小范围）；
+  dataview 委托渲染在真实 vault 的表现——欢迎反馈。
+
 ## 0.6.4
 
 ### 修复
