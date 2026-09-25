@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T13:57:23.095Z */
+/* Quick Journal — bundled 2026-09-25T14:47:32.326Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -29,7 +29,7 @@ var import_obsidian11 = require("obsidian");
 // src/types.ts
 var BOOL_YES = "\u2714\uFE0F";
 var BOOL_NO = "\u274C";
-var DEFAULT_SECTIONS = [
+var DEFAULT_DAILY_SECTIONS = [
   {
     id: "checkin",
     heading: "### \u6BCF\u65E5\u6253\u5361",
@@ -81,16 +81,69 @@ var DEFAULT_SECTIONS = [
     timestamp: true
   }
 ];
+var DEFAULT_JOURNALS = {
+  daily: { dir: "500 Journal/540 Daily", sections: DEFAULT_DAILY_SECTIONS },
+  weekly: {
+    dir: "500 Journal/530 Weekly",
+    sections: [
+      {
+        id: "weekly-review",
+        heading: "## \u{1F914} \u5468\u672B\u56DE\u987E\u4E0E\u603B\u7ED3",
+        type: "text",
+        fields: [
+          { key: "\u672C\u5468\u6210\u5C31/\u4EAE\u70B9", label: "\u6210\u5C31\u4EAE\u70B9" },
+          { key: "\u672C\u5468\u5173\u952E\u9879\u76EE/\u8BA1\u5212\u8FDB\u5C55", label: "\u9879\u76EE\u8FDB\u5C55" },
+          { key: "\u672C\u5468\u9047\u5230\u7684\u6311\u6218/\u95EE\u9898", label: "\u6311\u6218\u95EE\u9898" },
+          { key: "\u4E0B\u5468\u9700\u8981\u8C03\u6574\u7684\u5730\u65B9", label: "\u9700\u8981\u8C03\u6574" },
+          { key: "\u4E0B\u5468\u5C55\u671B", label: "\u4E0B\u5468\u5C55\u671B" }
+        ]
+      }
+    ]
+  },
+  monthly: {
+    dir: "500 Journal/520 Monthly",
+    sections: [
+      {
+        id: "monthly-review",
+        heading: "## \u{1F914} \u6708\u5EA6\u56DE\u987E\u4E0E\u603B\u7ED3",
+        type: "text",
+        fields: [
+          { key: "\u672C\u6708\u6700\u5927\u7684\u6210\u5C31/\u4EAE\u70B9", label: "\u6210\u5C31\u4EAE\u70B9" },
+          { key: "\u672C\u6708\u5173\u952E\u9879\u76EE\u8FDB\u5C55", label: "\u9879\u76EE\u8FDB\u5C55" },
+          { key: "\u672C\u6708\u9047\u5230\u7684\u6311\u6218/\u95EE\u9898", label: "\u6311\u6218\u95EE\u9898" },
+          { key: "\u4E0B\u6708\u9700\u8981\u8C03\u6574\u7684\u5730\u65B9", label: "\u9700\u8981\u8C03\u6574" },
+          { key: "\u4E0B\u6708\u5C55\u671B", label: "\u4E0B\u6708\u5C55\u671B" }
+        ]
+      }
+    ]
+  },
+  annual: { dir: "500 Journal/510 Annual", sections: [] }
+};
+var DEFAULT_SUMMARY_LAYOUT = [
+  "quick-capture",
+  "task-chart",
+  "checkin",
+  "trend",
+  "calendar",
+  "task-heatmap",
+  "entry-heatmap",
+  "feed",
+  "queries"
+];
 var DEFAULT_CONFIG = {
   language: "auto",
-  dailyDir: "500 Journal/540 Daily",
   templateNote: "",
-  sections: DEFAULT_SECTIONS
+  journals: DEFAULT_JOURNALS,
+  summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
+  summaryQueries: [],
+  viewLocations: { summary: "tab", panel: "tab" }
 };
 function isRecord(v) {
   return typeof v === "object" && v !== null;
 }
 var SECTION_TYPES = ["checkin", "data", "text", "list", "paragraph"];
+var PERIOD_TYPES = ["daily", "weekly", "monthly", "annual"];
+var QUERY_KINDS = ["dataview", "dataviewjs", "tasks"];
 function sanitizeSection(raw, fallbackIndex) {
   if (!isRecord(raw)) return null;
   const id = typeof raw.id === "string" && raw.id !== "" ? raw.id : `sec-${fallbackIndex}`;
@@ -102,18 +155,41 @@ function sanitizeSection(raw, fallbackIndex) {
     label: typeof f.label === "string" && f.label !== "" ? f.label : String(f.key),
     ...typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}
   })) : [];
-  const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : void 0;
-  const panel = raw.panel === true ? true : void 0;
-  const timestamp = raw.timestamp === true ? true : void 0;
   return {
     id,
     heading,
     type,
     fields,
-    ...lineTemplate ? { lineTemplate } : {},
-    ...panel ? { panel } : {},
-    ...timestamp ? { timestamp } : {}
+    ...typeof raw.lineTemplate === "string" ? { lineTemplate: raw.lineTemplate } : {},
+    ...raw.panel === true ? { panel: true } : {},
+    ...raw.timestamp === true ? { timestamp: true } : {}
   };
+}
+function sanitizeJournal(raw, fallback) {
+  if (!isRecord(raw)) return fallback;
+  const dir = typeof raw.dir === "string" && raw.dir.trim() !== "" ? raw.dir : fallback.dir;
+  let sections;
+  if (Array.isArray(raw.sections)) {
+    sections = raw.sections.map((s, i) => sanitizeSection(s, i)).filter((s) => s !== null);
+    if (sections.length === 0) sections = fallback.sections;
+  } else {
+    sections = fallback.sections;
+  }
+  return { dir, sections };
+}
+function sanitizeQueries(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((q) => isRecord(q) && typeof q.code === "string").filter((q) => QUERY_KINDS.includes(q.kind)).map((q) => ({ kind: q.kind, code: String(q.code) })).filter((q) => q.code.trim() !== "");
+}
+function sanitizeLayout(raw) {
+  if (!Array.isArray(raw)) return [...DEFAULT_SUMMARY_LAYOUT];
+  const known = new Set(DEFAULT_SUMMARY_LAYOUT);
+  const kept = raw.filter((id) => typeof id === "string" && known.has(id));
+  const out = [...new Set(kept)];
+  for (const id of DEFAULT_SUMMARY_LAYOUT) {
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
 }
 function mergeConfig(saved) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -121,112 +197,32 @@ function mergeConfig(saved) {
   if (saved.language === "zh" || saved.language === "en" || saved.language === "auto") {
     base.language = saved.language;
   }
-  if (typeof saved.dailyDir === "string" && saved.dailyDir.trim() !== "") {
-    base.dailyDir = saved.dailyDir;
-  }
   if (typeof saved.templateNote === "string") {
     base.templateNote = saved.templateNote;
   }
-  if (Array.isArray(saved.sections)) {
-    const sections = saved.sections.map((s, i) => sanitizeSection(s, i)).filter((s) => s !== null);
-    if (sections.length > 0) base.sections = sections;
-    return base;
+  if (isRecord(saved.journals)) {
+    for (const type of PERIOD_TYPES) {
+      base.journals[type] = sanitizeJournal(saved.journals[type], base.journals[type]);
+    }
+  } else if (typeof saved.dailyDir === "string" || Array.isArray(saved.sections)) {
+    base.journals.daily = sanitizeJournal(
+      { dir: saved.dailyDir, sections: saved.sections },
+      base.journals.daily
+    );
   }
-  if (isRecord(saved.registry) && Array.isArray(saved.registry.daily)) {
-    const kindMap = { bool: "checkin", number: "data", text: "text" };
-    const migrated = saved.registry.daily.map((s, i) => {
-      var _a;
-      if (!isRecord(s)) return null;
-      const type = (_a = kindMap[String(s.kind)]) != null ? _a : "text";
-      return sanitizeSection({ ...s, type }, i);
-    }).filter((s) => s !== null);
-    if (migrated.length > 0) {
-      const ids = new Set(migrated.map((s) => s.id));
-      for (const extra of DEFAULT_SECTIONS) {
-        if (extra.type === "list" && !ids.has(extra.id)) migrated.push(extra);
-      }
-      base.sections = migrated;
+  base.summaryLayout = sanitizeLayout(saved.summaryLayout);
+  base.summaryQueries = sanitizeQueries(saved.summaryQueries);
+  if (typeof saved.trendSelection === "string") base.trendSelection = saved.trendSelection;
+  if (isRecord(saved.viewLocations)) {
+    const vl = saved.viewLocations;
+    if (vl.summary === "tab" || vl.summary === "sidebar") {
+      base.viewLocations.summary = vl.summary;
+    }
+    if (vl.panel === "tab" || vl.panel === "sidebar") {
+      base.viewLocations.panel = vl.panel;
     }
   }
   return base;
-}
-
-// src/periods/period.ts
-function dateKey(d) {
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-function isoWeekOf(d) {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((date.getTime() - yearStart) / 864e5 + 1) / 7);
-  return { year: date.getUTCFullYear(), week };
-}
-function mondayOfIsoWeek(year, week) {
-  const jan4 = new Date(year, 0, 4);
-  const jan4Day = (jan4.getDay() + 6) % 7;
-  const week1Monday = new Date(year, 0, 4 - jan4Day);
-  const monday = new Date(week1Monday);
-  monday.setDate(monday.getDate() + (week - 1) * 7);
-  return monday;
-}
-function addDays(d, n) {
-  const out = new Date(d);
-  out.setDate(out.getDate() + n);
-  return out;
-}
-function daysInMonth(year, month1) {
-  return new Date(year, month1 + 1, 0).getDate();
-}
-function weekKey(d) {
-  const { year, week } = isoWeekOf(d);
-  return `${year}-W${String(week).padStart(2, "0")}`;
-}
-function monthKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-function yearKey(d) {
-  return String(d.getFullYear());
-}
-function periodOf(kind, d) {
-  if (kind === "week") {
-    const { year, week } = isoWeekOf(d);
-    const start2 = mondayOfIsoWeek(year, week);
-    const days2 = Array.from({ length: 7 }, (_, i) => addDays(start2, i));
-    return { kind, key: `${year}-W${String(week).padStart(2, "0")}`, start: start2, days: days2 };
-  }
-  if (kind === "month") {
-    const start2 = new Date(d.getFullYear(), d.getMonth(), 1);
-    const n = daysInMonth(d.getFullYear(), d.getMonth());
-    const days2 = Array.from({ length: n }, (_, i) => addDays(start2, i));
-    return { kind, key: monthKey(d), start: start2, days: days2 };
-  }
-  const start = new Date(d.getFullYear(), 0, 1);
-  const end = new Date(d.getFullYear(), 11, 31);
-  const days = [];
-  for (let cur = start; cur <= end; cur = addDays(cur, 1)) days.push(new Date(cur));
-  return { kind, key: yearKey(d), start, days };
-}
-function shiftPeriod(period, step) {
-  if (period.kind === "week") {
-    return periodOf("week", addDays(period.start, step * 7));
-  }
-  if (period.kind === "month") {
-    const d = new Date(period.start.getFullYear(), period.start.getMonth() + step, 1);
-    return periodOf("month", d);
-  }
-  return periodOf("year", new Date(period.start.getFullYear() + step, 0, 1));
-}
-function parseNoteDateKind(name) {
-  const base = name.replace(/\.md$/i, "");
-  if (/^\d{4}-\d{2}-\d{2}$/.test(base)) return { kind: "day", key: base };
-  if (/^\d{4}-W\d{2}$/.test(base)) return { kind: "week", key: base };
-  if (/^\d{4}-\d{2}$/.test(base)) return { kind: "month", key: base };
-  if (/^\d{4}$/.test(base)) return { kind: "year", key: base };
-  return null;
 }
 
 // src/i18n/en.ts
@@ -299,6 +295,18 @@ var EN = {
   "\u4E94": "Fr",
   "\u516D": "Sa",
   "\u65E5": "Su",
+  "\u65E5\u65E5\u5FD7": "Daily",
+  "\u7F16\u8F91\u6A21\u5F0F": "Edit layout",
+  "\u9000\u51FA\u7F16\u8F91": "Done editing",
+  "\u6DFB\u52A0\u7EC4\u4EF6": "Add component",
+  "\u6240\u6709\u7EC4\u4EF6\u5747\u5DF2\u663E\u793A": "All components are shown",
+  "\u62D6\u52A8\u6392\u5E8F": "Drag to reorder",
+  "\u67E5\u8BE2\u8BED\u53E5": "Query",
+  "\u6DFB\u52A0\u67E5\u8BE2": "Add query",
+  "\u6253\u5F00\u4F4D\u7F6E": "Default open location",
+  "\u6807\u7B7E\u9875": "Tab",
+  "\u53F3\u4FA7\u8FB9\u680F": "Right sidebar",
+  "\u65E5\u5FD7\u76EE\u5F55": "Journal folder",
   "\u5468": "Week",
   "\u6708": "Month",
   "\u5E74": "Year",
@@ -598,35 +606,171 @@ function applyPlan(text, plan) {
   return lines.join("\n");
 }
 
-// src/capture/variables.ts
-function formatDate(d, format) {
-  return format.replaceAll("YYYY", String(d.getFullYear())).replaceAll("YY", String(d.getFullYear()).slice(2)).replaceAll("MM", String(d.getMonth() + 1).padStart(2, "0")).replaceAll("DD", String(d.getDate()).padStart(2, "0"));
+// src/periods/period.ts
+function dateKey(d) {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
 }
-function renderTemplate(template, now) {
-  const { year, week } = isoWeekOf(now);
-  return template.replaceAll("{{date:YYYY-MM-DD}}", dateKey(now)).replaceAll("{{week}}", `${year}-W${String(week).padStart(2, "0")}`).replaceAll("{{month}}", monthKey(now)).replaceAll("{{year}}", yearKey(now)).replaceAll("{{weekKey}}", weekKey(now)).replace(/\{\{date:([^}]+)\}\}/g, (_all, fmt) => formatDate(now, fmt)).replaceAll("{{date}}", dateKey(now));
+function isoWeekOf(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((date.getTime() - yearStart) / 864e5 + 1) / 7);
+  return { year: date.getUTCFullYear(), week };
 }
-function targetNotePath(dir, fileTemplate, now) {
-  const name = renderTemplate(fileTemplate, now);
-  return `${dir.replace(/\/+$/, "")}/${name}.md`;
+function mondayOfIsoWeek(year, week) {
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7;
+  const week1Monday = new Date(year, 0, 4 - jan4Day);
+  const monday = new Date(week1Monday);
+  monday.setDate(monday.getDate() + (week - 1) * 7);
+  return monday;
+}
+function addDays(d, n) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+function daysInMonth(year, month1) {
+  return new Date(year, month1 + 1, 0).getDate();
+}
+function monthKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+function yearKey(d) {
+  return String(d.getFullYear());
+}
+function periodOf(kind, d) {
+  if (kind === "week") {
+    const { year, week } = isoWeekOf(d);
+    const start2 = mondayOfIsoWeek(year, week);
+    const days2 = Array.from({ length: 7 }, (_, i) => addDays(start2, i));
+    return { kind, key: `${year}-W${String(week).padStart(2, "0")}`, start: start2, days: days2 };
+  }
+  if (kind === "month") {
+    const start2 = new Date(d.getFullYear(), d.getMonth(), 1);
+    const n = daysInMonth(d.getFullYear(), d.getMonth());
+    const days2 = Array.from({ length: n }, (_, i) => addDays(start2, i));
+    return { kind, key: monthKey(d), start: start2, days: days2 };
+  }
+  const start = new Date(d.getFullYear(), 0, 1);
+  const end = new Date(d.getFullYear(), 11, 31);
+  const days = [];
+  for (let cur = start; cur <= end; cur = addDays(cur, 1)) days.push(new Date(cur));
+  return { kind, key: yearKey(d), start, days };
+}
+function periodFromKey(key) {
+  const w = /^(\d{4})-W(\d{2})$/.exec(key);
+  if (w) {
+    const year = Number(w[1]);
+    const week = Number(w[2]);
+    if (week < 1 || week > 53) return null;
+    const start = mondayOfIsoWeek(year, week);
+    return periodOf("week", start);
+  }
+  const m = /^(\d{4})-(\d{2})$/.exec(key);
+  if (m) return periodOf("month", new Date(Number(m[1]), Number(m[2]) - 1, 1));
+  const y = /^(\d{4})$/.exec(key);
+  if (y) return periodOf("year", new Date(Number(y[1]), 0, 1));
+  return null;
+}
+function shiftPeriod(period, step) {
+  if (period.kind === "week") {
+    return periodOf("week", addDays(period.start, step * 7));
+  }
+  if (period.kind === "month") {
+    const d = new Date(period.start.getFullYear(), period.start.getMonth() + step, 1);
+    return periodOf("month", d);
+  }
+  return periodOf("year", new Date(period.start.getFullYear() + step, 0, 1));
+}
+function parseNoteDateKind(name) {
+  const base = name.replace(/\.md$/i, "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(base)) return { kind: "day", key: base };
+  if (/^\d{4}-W\d{2}$/.test(base)) return { kind: "week", key: base };
+  if (/^\d{4}-\d{2}$/.test(base)) return { kind: "month", key: base };
+  if (/^\d{4}$/.test(base)) return { kind: "year", key: base };
+  return null;
 }
 
 // src/capture/skeleton.ts
-function dailySkeleton(date, sections) {
-  const day = dateKey(date);
-  const lines = [
-    "---",
-    "journal: Daily",
-    `journal-date: ${day}`,
-    "type: daily_log",
-    `created: ${day}`,
-    "tags:",
-    "  - journal/daily",
-    "---",
-    "",
-    `# ${day} \u65E5\u5FD7`,
-    ""
-  ];
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function noteKeyFor(type, now) {
+  if (type === "weekly") {
+    const { year, week } = isoWeekOf(now);
+    return `${year}-W${pad2(week)}`;
+  }
+  if (type === "monthly") return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+  if (type === "annual") return String(now.getFullYear());
+  return dateKey(now);
+}
+function skeletonFor(type, now, sections) {
+  const day = dateKey(now);
+  let frontmatter;
+  let title;
+  if (type === "weekly") {
+    const { year, week } = isoWeekOf(now);
+    const key = `${year}-W${pad2(week)}`;
+    frontmatter = [
+      "---",
+      "journal: Weekly",
+      `journal-date: ${dateKey(mondayOfIsoWeek(year, week))}`,
+      "type: weekly_review",
+      `year: ${year}`,
+      `month: ${pad2(now.getMonth() + 1)}`,
+      `week: W${pad2(week)}`,
+      `created: ${day}`,
+      "tags:",
+      "  - journal/weekly",
+      "---"
+    ];
+    title = `# ${key} \u5468\u65E5\u5FD7`;
+  } else if (type === "monthly") {
+    const key = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    frontmatter = [
+      "---",
+      "journal: Monthly",
+      `journal-date: ${dateKey(new Date(now.getFullYear(), now.getMonth(), 1))}`,
+      "type: monthly_review",
+      `year: ${now.getFullYear()}`,
+      `month: ${pad2(now.getMonth() + 1)}`,
+      `created: ${day}`,
+      "tags:",
+      "  - journal/monthly",
+      "---"
+    ];
+    title = `# ${key} \u6708\u5EA6\u65E5\u5FD7`;
+  } else if (type === "annual") {
+    frontmatter = [
+      "---",
+      "journal: Annual",
+      `journal-date: ${now.getFullYear()}-01-01`,
+      "type: annual_review",
+      `year: ${now.getFullYear()}`,
+      `created: ${day}`,
+      "tags:",
+      "  - journal/annual",
+      "---"
+    ];
+    title = `# ${now.getFullYear()} \u5E74\u5EA6\u65E5\u5FD7`;
+  } else {
+    frontmatter = [
+      "---",
+      "journal: Daily",
+      `journal-date: ${day}`,
+      "type: daily_log",
+      `created: ${day}`,
+      "tags:",
+      "  - journal/daily",
+      "---"
+    ];
+    title = `# ${day} \u65E5\u5FD7`;
+  }
+  const lines = [...frontmatter, "", title, ""];
   for (const section of sections) {
     lines.push(section.heading, "");
     for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
@@ -805,19 +949,30 @@ var CaptureService = class {
     this.app = app;
     this.getConfig = getConfig;
   }
-  dailyPath(now) {
-    return targetNotePath(this.getConfig().dailyDir, "{{date}}", now);
+  journal(type) {
+    return this.getConfig().journals[type];
   }
-  async performSection(section, payload, opts) {
+  notePath(type, now) {
+    const dir = this.journal(type).dir.replace(/\/+$/, "");
+    return `${dir}/${noteKeyFor(type, now)}.md`;
+  }
+  /** 兼容旧调用（面板 / 日志定位用）。 */
+  dailyPath(now) {
+    return this.notePath("daily", now);
+  }
+  weeklyPath(now) {
+    return this.notePath("weekly", now);
+  }
+  async performSection(type, section, payload, opts) {
     var _a, _b;
     const now = (_a = opts.now) != null ? _a : /* @__PURE__ */ new Date();
-    const path = this.dailyPath(now);
+    const path = this.notePath(type, now);
     let text;
     let created = false;
     try {
       text = await readNoteText(this.app, path);
     } catch (e) {
-      const skeleton = dailySkeleton(now, this.getConfig().sections);
+      const skeleton = skeletonFor(type, now, this.journal(type).sections);
       const file = await ensureNote(this.app, path, skeleton);
       created = true;
       text = await this.app.vault.cachedRead(file);
@@ -875,45 +1030,45 @@ var CaptureService = class {
       writtenLines: plan.edits.length + plan.creates.length
     };
   }
-  /** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。 */
+  /** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */
   withTimestamp(section, value, now) {
     if (section.timestamp !== true) return value;
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
     return `${hh}:${mm} ${value}`;
   }
-  // ── 速记面板的条目级写回（编辑 / 删除，不跳回日志） ─────────────────────
-  /** 编辑一条流条目：line/field 原位改行（保留标记与时间戳），paragraph 整段重写。 */
+  // ── 速记面板的条目级写回（编辑 / 删除 / 切换，不跳回日志） ───────────────
   async editEntry(section, entry, content) {
     return this.mutateEntry(section, entry, content);
   }
-  /** 删除一条流条目：line 删行，field 清值回空值行，paragraph 清空整段。 */
   async deleteEntry(section, entry) {
     return this.mutateEntry(section, entry, null);
   }
   /** 切换任务完成态（面板点击状态符号）。 */
   async toggleTaskEntry(section, entry) {
-    return this.rewriteRawLine(section, entry, (raw) => {
-      const today = dateKey(/* @__PURE__ */ new Date());
-      return toggleTaskLine(raw, today);
-    });
+    return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(/* @__PURE__ */ new Date())));
   }
   /** 列表 ↔ 任务互转（面板条目按钮）。 */
   async convertEntry(section, entry) {
-    return this.rewriteRawLine(section, entry, convertListTask);
+    return this.rewriteRawLine(entry, convertListTask);
   }
-  async rewriteRawLine(_section, entry, build) {
+  entryPath(entry) {
+    return `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
+  }
+  async readLines(path) {
+    try {
+      return (await readNoteText(this.app, path)).split(/\r?\n/);
+    } catch (e) {
+      return null;
+    }
+  }
+  async rewriteRawLine(entry, build) {
     if (entry.lineIndex === void 0 || entry.raw === void 0) {
       return { ok: false, message: "not a line entry" };
     }
-    const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
-    let text;
-    try {
-      text = await readNoteText(this.app, path);
-    } catch (e) {
-      return { ok: false, message: `note not found: ${entry.date}` };
-    }
-    const lines = text.split(/\r?\n/);
+    const path = this.entryPath(entry);
+    const lines = await this.readLines(path);
+    if (lines === null) return { ok: false, message: `note not found: ${entry.date}` };
     if (entry.lineIndex >= lines.length || lines[entry.lineIndex] !== entry.raw) {
       return { ok: false, message: "stale-line" };
     }
@@ -925,23 +1080,15 @@ var CaptureService = class {
   /** 段落「重发 = 编辑」：取当天段落现有内容做表单预填（空返回 ""）。 */
   async paragraphContent(dateStr, section) {
     var _a, _b;
-    const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${dateStr}.md`;
-    let text;
-    try {
-      text = await readNoteText(this.app, path);
-    } catch (e) {
-      return "";
-    }
-    const entries = collectEntries(
-      dateStr,
-      text.split(/\r?\n/),
-      [section]
-    );
-    return (_b = (_a = entries[0]) == null ? void 0 : _a.content) != null ? _b : "";
+    const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "paragraph", text: "" });
+    const lines = await this.readLines(path);
+    if (lines === null) return "";
+    const entries = collectEntries(dateStr, lines, [section]);
+    return (_b = (_a = entries[0]) == null ? void 0 : _a.text) != null ? _b : "";
   }
   async mutateEntry(section, entry, content) {
     var _a, _b, _c, _d;
-    const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
+    const path = this.entryPath(entry);
     let text;
     try {
       text = await readNoteText(this.app, path);
@@ -1160,36 +1307,6 @@ function boolStats(fields, days, records) {
       }
     }
     return { key: f.key, label: f.label, yes, no, missingDays };
-  });
-}
-function numberStats(fields, days, records) {
-  return fields.map((f) => {
-    var _a;
-    const samples = [];
-    for (const day of days) {
-      const raw = (_a = records.get(day)) == null ? void 0 : _a.fieldValues[f.key];
-      if (raw === void 0 || raw === "") continue;
-      const n = Number(raw);
-      if (Number.isFinite(n)) samples.push({ date: day, value: n });
-    }
-    if (samples.length === 0) {
-      return { key: f.key, label: f.label, unit: f.unit, count: 0, min: 0, max: 0, mean: 0, sum: 0 };
-    }
-    const values = samples.map((s) => s.value);
-    const sum = values.reduce((a, b) => a + b, 0);
-    const latest = samples[samples.length - 1];
-    return {
-      key: f.key,
-      label: f.label,
-      unit: f.unit,
-      count: samples.length,
-      min: Math.min(...values),
-      max: Math.max(...values),
-      mean: sum / samples.length,
-      sum,
-      latest: latest.value,
-      latestDate: latest.date
-    };
   });
 }
 function taskStats(days, records) {
@@ -1439,97 +1556,208 @@ function monthGrid(year, month0) {
 }
 
 // src/views/components.ts
-function cardShell(parent, title) {
-  const card = parent.createDiv({ cls: "qj-card" });
-  card.createDiv({ cls: "qj-card-title", text: title });
-  return card;
-}
-function renderQuickCapture(parent, plugin) {
-  const card = cardShell(parent, t("\u5FEB\u901F\u5F55\u5165"));
+var TYPE_PREFIX = {
+  daily: "",
+  weekly: "\u5468 \xB7 ",
+  monthly: "\u6708 \xB7 ",
+  annual: "\u5E74 \xB7 "
+};
+function renderQuickCapture(card, ctx) {
   const row = card.createDiv({ cls: "qj-capture-row" });
-  for (const section of plugin.config.sections) {
-    const btn = row.createEl("button", { cls: "qj-btn", text: section.heading.replace(/^#+\s*/, "") });
-    btn.type = "button";
-    btn.onclick = () => plugin.openSectionCapture(section);
+  for (const type of ["daily", "weekly", "monthly", "annual"]) {
+    for (const section of ctx.plugin.config.journals[type].sections) {
+      const btn = row.createEl("button", {
+        cls: "qj-btn",
+        text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`
+      });
+      btn.type = "button";
+      btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
+    }
   }
 }
-function renderBarChart(parent, data) {
-  const card = cardShell(parent, t("\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1"));
+function renderTaskChart(card, ctx, metrics, done) {
+  const grid = card.createDiv({ cls: "qj-metric-grid" });
+  for (const m of metrics) {
+    const cell = grid.createDiv({ cls: "qj-metric" });
+    cell.createSpan({ cls: "qj-metric-value", text: m.value });
+    cell.createSpan({ cls: "qj-metric-label", text: m.label });
+  }
+  const data = ctx.kind === "year" ? Array.from({ length: 12 }, (_, m) => {
+    let sum = 0;
+    for (const [day, n] of done) {
+      if (Number(day.slice(5, 7)) - 1 === m) sum += n;
+    }
+    return { label: String(m + 1).padStart(2, "0"), value: sum };
+  }) : ctx.days.map((d) => {
+    var _a;
+    return { label: d.slice(8), value: (_a = done.get(d)) != null ? _a : 0 };
+  });
   const max = Math.max(1, ...data.map((d) => d.value));
   const chart = card.createDiv({ cls: "qj-bars" });
-  data.forEach((d, i) => {
+  for (const d of data) {
     const col = chart.createDiv({ cls: "qj-bar-col" });
-    col.createDiv({
+    const plot = col.createDiv({ cls: "qj-bar-plot" });
+    if (d.value > 0) plot.createSpan({ cls: "qj-bar-count", text: String(d.value) });
+    plot.createDiv({
       cls: "qj-bar-v",
-      attr: { style: `height:${Math.round(d.value / max * 100)}%` },
-      text: d.value > 0 ? String(d.value) : ""
+      attr: { style: `height:${Math.max(3, Math.round(d.value / max * 100))}%` }
     });
-    if (i === 0 || i === data.length - 1 || data.length <= 16 || i % 3 === 0) {
-      col.createSpan({ cls: "qj-bar-l", text: d.label });
-    } else {
-      col.createSpan({ cls: "qj-bar-l", text: " " });
-    }
-  });
+    col.createSpan({ cls: "qj-bar-l", text: d.label });
+  }
 }
-function renderHeatmap(parent, title, days, counts) {
-  var _a;
-  const card = cardShell(parent, title);
-  const grid = card.createDiv({ cls: "qj-heatmap" });
+function renderHeatmap(card, ctx, counts, wide) {
+  var _a, _b;
+  if (wide) card.addClass("qj-card--wide");
   const max = Math.max(1, ...counts.values());
-  for (const day of days) {
-    const n = (_a = counts.get(day)) != null ? _a : 0;
-    const level = n === 0 ? 0 : Math.min(4, 1 + Math.ceil(n / max * 4) - 1);
+  const weekdays = ["\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D", "\u65E5"].map((w) => t(w));
+  if (ctx.kind === "week") {
+    const row = card.createDiv({ cls: "qj-hm-week" });
+    ctx.days.forEach((day, i) => {
+      var _a2;
+      const n = (_a2 = counts.get(day)) != null ? _a2 : 0;
+      const box = row.createDiv({
+        cls: `qj-hm-big qj-hm-l${level(n, max)}`,
+        attr: { title: `${day} \xB7 ${n}` }
+      });
+      box.createSpan({ cls: "qj-hm-big-label", text: weekdays[i] });
+      box.createSpan({ cls: "qj-hm-big-count", text: String(n) });
+    });
+    return;
+  }
+  if (ctx.kind === "month") {
+    const grid2 = card.createDiv({ cls: "qj-hm-grid" });
+    for (const w of weekdays) grid2.createDiv({ cls: "qj-cal-head", text: w });
+    const first = /* @__PURE__ */ new Date(`${ctx.days[0]}T00:00:00`);
+    const weeks = monthGrid(first.getFullYear(), first.getMonth());
+    for (const week of weeks) {
+      for (const cell of week) {
+        const n = cell.inMonth ? (_a = counts.get(cell.key)) != null ? _a : 0 : -1;
+        const box = grid2.createDiv({
+          cls: `qj-hm-cell-m${n < 0 ? " qj-cal-out" : ` qj-hm-l${level(n, max)}`}`,
+          attr: { title: `${cell.key} \xB7 ${Math.max(0, n)}` }
+        });
+        box.createSpan({ cls: "qj-hm-cell-day", text: String(cell.date.getDate()) });
+        if (n > 0) box.createSpan({ cls: "qj-hm-cell-count", text: String(n) });
+      }
+    }
+    return;
+  }
+  const grid = card.createDiv({ cls: "qj-heatmap" });
+  for (const day of ctx.days) {
+    const n = (_b = counts.get(day)) != null ? _b : 0;
     grid.createDiv({
-      cls: `qj-hm-cell qj-hm-l${level}`,
+      cls: `qj-hm-cell qj-hm-l${level(n, max)}`,
       attr: { title: `${day} \xB7 ${n}` }
     });
   }
 }
-function renderTrend(parent, fields) {
-  const card = cardShell(parent, t("\u6570\u636E\u8D8B\u52BF"));
-  for (const f of fields) {
-    const row = card.createDiv({ cls: "qj-trend-row" });
-    row.createSpan({ cls: "qj-checkin-label", text: f.label });
-    const points = [];
-    const values = f.days.map((d) => f.values.get(d)).filter((v) => v !== void 0);
-    if (values.length < 2) {
-      row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "\u2014" });
-      continue;
+function level(n, max) {
+  if (n === 0) return 0;
+  return Math.min(4, Math.max(1, Math.ceil(n / max * 4)));
+}
+function renderTrend(card, ctx) {
+  var _a, _b;
+  const config = ctx.plugin.config;
+  const fields = [];
+  for (const section of config.journals.daily.sections) {
+    if (section.type !== "data") continue;
+    for (const f of section.fields) {
+      const values = /* @__PURE__ */ new Map();
+      for (const day of ctx.days) {
+        const raw = (_a = ctx.records.get(day)) == null ? void 0 : _a.fieldValues[f.key];
+        if (raw === void 0 || raw === "") continue;
+        const n = Number(raw);
+        if (Number.isFinite(n)) values.set(day, n);
+      }
+      if (values.size > 0) fields.push({ id: `${section.id}::${f.key}`, label: f.label, unit: f.unit, values });
     }
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = max - min || 1;
-    const W = 100;
-    const H = 30;
-    f.days.forEach((day, i) => {
-      const v = f.values.get(day);
-      if (v === void 0) return;
-      points.push({ x: i / (f.days.length - 1) * W, y: H - (v - min) / span * H });
-    });
-    const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-    const svg = row.createSvg("svg", {
-      attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
-      cls: "qj-trend-svg"
-    });
-    svg.appendChild(createSvgEl(row, "polyline", { points: line }));
-    const unit = f.unit ? ` ${f.unit}` : "";
-    row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
   }
+  if (fields.length === 0) {
+    card.createDiv({ cls: "qj-muted", text: "\u2014" });
+    return;
+  }
+  const selected = (_b = fields.find((f) => f.id === config.trendSelection)) != null ? _b : fields[0];
+  const select = card.createEl("select", { cls: "qj-input qj-trend-select" });
+  for (const f of fields) {
+    const opt = select.createEl("option", { text: f.label, attr: { value: f.id } });
+    if (f.id === selected.id) opt.selected = true;
+  }
+  select.onchange = async () => {
+    config.trendSelection = select.value;
+    await ctx.plugin.saveConfig();
+  };
+  renderSparkline(card, selected, ctx.days);
+}
+function renderSparkline(card, f, days) {
+  const row = card.createDiv({ cls: "qj-trend-row" });
+  const values = days.map((d) => f.values.get(d)).filter((v) => v !== void 0);
+  if (values.length < 2) {
+    row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "\u2014" });
+    return;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const W = 100;
+  const H = 46;
+  const points = days.map((day, i) => {
+    const v = f.values.get(day);
+    if (v === void 0) return null;
+    return { x: i / (days.length - 1) * W, y: H - (v - min) / span * H };
+  }).filter((p) => p !== null);
+  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const svg = row.createSvg("svg", {
+    attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
+    cls: "qj-trend-svg"
+  });
+  svg.appendChild(
+    createSvgEl(row, "polyline", { points: line })
+  );
+  const unit = f.unit ? ` ${f.unit}` : "";
+  row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
 }
 function createSvgEl(host, tag, attrs) {
   const el = host.ownerDocument.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
 }
-function renderCalendar(parent, app, dailyDir, year, month0, done, hasNote) {
+function renderCalendar(card, app, ctx) {
   var _a;
-  const card = cardShell(parent, `${year}-${String(month0 + 1).padStart(2, "0")} ${t("\u6708\u5386")}`);
+  const config = ctx.plugin.config;
+  const first = /* @__PURE__ */ new Date(`${ctx.days[0]}T00:00:00`);
+  const year = first.getFullYear();
+  const month0 = first.getMonth();
+  const key = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+  const title = card.createDiv({ cls: "qj-cal-title" });
+  const yearChip = title.createEl("button", { cls: "qj-cal-chip", text: String(year) });
+  yearChip.type = "button";
+  yearChip.onclick = () => void ctx.plugin.openPeriodNote("annual", String(year));
+  const monthChip = title.createEl("button", { cls: "qj-cal-chip", text: key });
+  monthChip.type = "button";
+  monthChip.onclick = () => void ctx.plugin.openPeriodNote("monthly", key);
   const weekdays = ["\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D", "\u65E5"].map((w) => t(w));
   const grid = card.createDiv({ cls: "qj-cal" });
+  grid.createDiv({ cls: "qj-cal-head", text: "W" });
   for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
+  const done = /* @__PURE__ */ new Map();
+  for (const [day, rec] of ctx.records) {
+    let n = 0;
+    for (const line of rec.taskLines) {
+      if (/^\s*[-*]\s+\[[xX]\]/.test(line)) n++;
+    }
+    if (n > 0) done.set(day, n);
+  }
   const today = dateKey(/* @__PURE__ */ new Date());
-  const index = new VaultIndex(app, dailyDir);
+  const index = new VaultIndex(app, config.journals.daily.dir);
   for (const week of monthGrid(year, month0)) {
+    const monday = week[0].date;
+    const weekCell = grid.createDiv({ cls: "qj-cal-weekno" });
+    const wmatch = /^(\d{4})-W(\d{2})$/.exec(weekKeyOf(monday));
+    weekCell.setText(wmatch ? wmatch[2] : "");
+    weekCell.onclick = () => {
+      const k = weekKeyOf(monday);
+      if (k) void ctx.plugin.openPeriodNote("weekly", k);
+    };
     for (const cell of week) {
       const el = grid.createDiv({ cls: `qj-cal-cell${cell.inMonth ? "" : " qj-cal-out"}` });
       if (!cell.inMonth) continue;
@@ -1537,7 +1765,7 @@ function renderCalendar(parent, app, dailyDir, year, month0, done, hasNote) {
       el.createSpan({ cls: "qj-cal-day", text: String(cell.date.getDate()) });
       const n = (_a = done.get(cell.key)) != null ? _a : 0;
       if (n > 0) el.createSpan({ cls: "qj-cal-badge", text: String(n) });
-      if (hasNote.has(cell.key)) el.createSpan({ cls: "qj-cal-dot" });
+      if (ctx.records.has(cell.key)) el.createSpan({ cls: "qj-cal-dot" });
       el.onclick = () => {
         const file = index.dailyFile(cell.key);
         if (file) void app.workspace.getLeaf(false).openFile(file);
@@ -1545,13 +1773,22 @@ function renderCalendar(parent, app, dailyDir, year, month0, done, hasNote) {
     }
   }
 }
-function renderCheckin(parent, sections, days, records) {
-  for (const section of sections) {
+function weekKeyOf(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((date.getTime() - yearStart) / 864e5 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+function renderCheckin(card, ctx) {
+  for (const section of ctx.plugin.config.journals.daily.sections) {
     if (section.type !== "checkin") continue;
-    const stats = boolStats(section.fields, days, records);
-    const card = cardShell(parent, section.heading.replace(/^#+\s*/, ""));
+    const stats = boolStats(section.fields, ctx.days, ctx.records);
+    const block = card.createDiv();
+    block.createDiv({ cls: "qj-checkin-heading", text: section.heading.replace(/^#+\s*/, "") });
     for (const s of stats) {
-      const row = card.createDiv({ cls: "qj-checkin-row" });
+      const row = block.createDiv({ cls: "qj-checkin-row" });
       row.createSpan({ cls: "qj-checkin-label", text: s.label });
       const bar = row.createDiv({ cls: "qj-bar" });
       const recorded = s.yes + s.no;
@@ -1566,15 +1803,14 @@ function renderCheckin(parent, sections, days, records) {
     }
   }
 }
-function renderFeedMini(parent, plugin, entries) {
+function renderFeedMini(card, ctx) {
   var _a;
-  const card = cardShell(parent, t("\u6700\u8FD1\u901F\u8BB0"));
-  const latest = [...entries].sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 8);
+  const latest = [...ctx.entries].sort((a, b) => a.date < b.date ? 1 : -1).slice(0, 8);
   if (latest.length === 0) {
     card.createDiv({ cls: "qj-muted", text: t("\u6682\u65E0\u5185\u5BB9\uFF0C\u5148\u53BB\u8BB0\u4E00\u6761") });
   } else {
     const names = new Map(
-      plugin.config.sections.filter((s) => s.panel === true).map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])
+      ctx.plugin.config.journals.daily.sections.filter((s) => s.panel === true).map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])
     );
     for (const e of latest) {
       const row = card.createDiv({ cls: "qj-mini-row" });
@@ -1588,26 +1824,36 @@ function renderFeedMini(parent, plugin, entries) {
   }
   const more = card.createEl("button", { cls: "qj-btn", text: t("\u6253\u5F00\u901F\u8BB0\u9762\u677F") });
   more.type = "button";
-  more.onclick = () => void plugin.openView("qj-panel");
+  more.onclick = () => void ctx.plugin.openView("qj-panel", ctx.plugin.config.viewLocations.panel);
 }
-async function renderQueryPanel(parent, app, blocks, component) {
-  const card = cardShell(parent, t("\u65E5\u5FD7\u5185\u67E5\u8BE2\u5757"));
-  if (blocks.length === 0) {
+async function renderQueryPanel(card, app, ctx, detected) {
+  const config = ctx.plugin.config;
+  if (ctx.editing) {
+    renderQueryEditor(card, ctx);
+    return;
+  }
+  const custom = config.summaryQueries.map((q) => ({
+    kind: q.kind,
+    code: q.code,
+    source: ""
+  }));
+  const all = [...custom, ...detected];
+  if (all.length === 0) {
     card.createDiv({ cls: "qj-muted", text: t("\u6682\u65E0\u67E5\u8BE2\u5757") });
     return;
   }
   const bridge = new QueryBridge(app);
-  for (const block of blocks) {
+  for (const block of all) {
     const wrap = card.createDiv({ cls: "qj-query-block" });
     wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
     const body = wrap.createDiv({ cls: "qj-query-body" });
     let ok = false;
     if (block.kind === "dataview") {
-      ok = await bridge.renderDvQuery(block.code, block.source, body, component);
+      ok = await bridge.renderDvQuery(block.code, block.source, body, ctx.component);
     } else if (block.kind === "dataviewjs") {
-      ok = bridge.renderDvJs(block.code, body, component, block.source);
+      ok = bridge.renderDvJs(block.code, body, ctx.component, block.source);
     } else {
-      ok = await bridge.renderTasksQuery(block.code, block.source, body, component);
+      ok = await bridge.renderTasksQuery(block.code, block.source, body, ctx.component);
     }
     if (!ok) {
       body.empty();
@@ -1617,6 +1863,40 @@ async function renderQueryPanel(parent, app, blocks, component) {
       });
     }
   }
+}
+function renderQueryEditor(card, ctx) {
+  const config = ctx.plugin.config;
+  const rerender = ctx.rerender;
+  for (const q of [...config.summaryQueries]) {
+    const row = card.createDiv({ cls: "qj-query-edit-row" });
+    row.createSpan({ cls: "qj-query-chip", text: q.kind });
+    row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
+    const del = row.createEl("button", { cls: "qj-feed-btn" });
+    del.type = "button";
+    del.setAttribute("aria-label", t("\u5220\u9664"));
+    del.setText("\u2715");
+    del.onclick = async () => {
+      config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
+      await ctx.plugin.saveConfig();
+      rerender();
+    };
+  }
+  const add = card.createDiv({ cls: "qj-query-add" });
+  const kindSel = add.createEl("select", { cls: "qj-input" });
+  for (const k of ["dataview", "dataviewjs", "tasks"]) {
+    kindSel.createEl("option", { text: k, attr: { value: k } });
+  }
+  const code = add.createEl("textarea", { cls: "qj-input qj-textarea" });
+  code.rows = 3;
+  code.placeholder = t("\u67E5\u8BE2\u8BED\u53E5");
+  const btn = add.createEl("button", { cls: "qj-btn", text: t("\u6DFB\u52A0\u67E5\u8BE2") });
+  btn.type = "button";
+  btn.onclick = async () => {
+    if (code.value.trim() === "") return;
+    config.summaryQueries.push({ kind: kindSel.value, code: code.value.trim() });
+    await ctx.plugin.saveConfig();
+    rerender();
+  };
 }
 
 // src/views/summary-view.ts
@@ -1632,6 +1912,8 @@ var SummaryView = class extends import_obsidian7.ItemView {
     this.plugin = plugin;
     this.kind = "week";
     this.period = periodOf("week", /* @__PURE__ */ new Date());
+    this.editing = false;
+    this.dragId = null;
   }
   getViewType() {
     return VIEW_TYPE_QJ_SUMMARY;
@@ -1691,111 +1973,198 @@ var SummaryView = class extends import_obsidian7.ItemView {
       this.period = periodOf(this.kind, /* @__PURE__ */ new Date());
       void this.render();
     };
+    const edit = nav.createEl("button", {
+      cls: `qj-btn qj-icon-btn${this.editing ? " is-active" : ""}`
+    });
+    edit.type = "button";
+    edit.setAttribute("aria-label", this.editing ? t("\u9000\u51FA\u7F16\u8F91") : t("\u7F16\u8F91\u6A21\u5F0F"));
+    (0, import_obsidian7.setIcon)(edit, this.editing ? "check" : "settings-2");
+    edit.onclick = () => {
+      this.editing = !this.editing;
+      void this.render();
+    };
     const refresh = nav.createEl("button", { cls: "qj-btn qj-icon-btn" });
     refresh.type = "button";
     (0, import_obsidian7.setIcon)(refresh, "refresh-cw");
     refresh.onclick = () => void this.render();
   }
+  /** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由组件自己画）。 */
+  components() {
+    return [
+      {
+        id: "quick-capture",
+        title: t("\u5FEB\u901F\u5F55\u5165"),
+        render: (card, ctx) => renderQuickCapture(card, ctx)
+      },
+      {
+        id: "task-chart",
+        title: t("\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1"),
+        render: (card, ctx) => {
+          const tasks = taskStats(ctx.days, ctx.records);
+          const done = doneByDay(ctx.days, ctx.records);
+          renderTaskChart(card, ctx, [
+            { label: t("\u5B8C\u6210"), value: String(tasks.doneInPeriod) },
+            { label: t("\u65B0\u5EFA"), value: String(tasks.createdInPeriod) },
+            { label: t("\u8BB0\u5F55"), value: `${tasks.done}/${tasks.total}` }
+          ], done);
+        }
+      },
+      {
+        id: "checkin",
+        title: t("\u6253\u5361"),
+        render: (card, ctx) => renderCheckin(card, ctx)
+      },
+      {
+        id: "trend",
+        title: t("\u6570\u636E\u8D8B\u52BF"),
+        render: (card, ctx) => renderTrend(card, ctx)
+      },
+      {
+        id: "calendar",
+        title: t("\u6708\u5386"),
+        kinds: ["week", "month"],
+        render: (card, ctx) => renderCalendar(card, this.app, ctx)
+      },
+      {
+        id: "task-heatmap",
+        title: t("\u4EFB\u52A1\u5B8C\u6210\u70ED\u529B\u56FE"),
+        render: (card, ctx) => renderHeatmap(card, ctx, doneByDay(ctx.days, ctx.records), ctx.kind === "year")
+      },
+      {
+        id: "entry-heatmap",
+        title: t("\u5185\u5BB9\u8BB0\u5F55\u70ED\u529B\u56FE"),
+        render: (card, ctx) => {
+          var _a;
+          const counts = /* @__PURE__ */ new Map();
+          for (const e of ctx.entries) {
+            counts.set(e.date, ((_a = counts.get(e.date)) != null ? _a : 0) + 1);
+          }
+          renderHeatmap(card, ctx, counts, ctx.kind === "year");
+        }
+      },
+      {
+        id: "feed",
+        title: t("\u6700\u8FD1\u901F\u8BB0"),
+        render: (card, ctx) => renderFeedMini(card, ctx)
+      },
+      {
+        id: "queries",
+        title: t("\u65E5\u5FD7\u5185\u67E5\u8BE2\u5757"),
+        render: (card, ctx, extra) => void renderQueryPanel(card, this.app, ctx, extra.queries)
+      }
+    ];
+  }
+  hasPanelSections() {
+    return this.plugin.config.journals.daily.sections.some((s) => s.panel === true);
+  }
   async renderBody(body) {
-    var _a, _b;
     const config = this.plugin.config;
-    const index = new VaultIndex(this.app, config.dailyDir);
+    const index = new VaultIndex(this.app, config.journals.daily.dir);
     const days = this.period.days.map(dateKey);
-    const periodResult = await index.collectDayRecords(this.period.days);
-    const records = periodResult.records;
+    const records = (await index.collectDayRecords(this.period.days)).records;
     body.createDiv({ cls: "qj-period-header" }).createSpan({
       cls: "qj-period-count",
       text: `${records.size} ${t("\u6761\u65E5\u5FD7")}`
     });
-    const today = /* @__PURE__ */ new Date();
-    const yearDays = Array.from({ length: 365 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (364 - i));
-      return d;
-    });
-    const yearRecords = (await index.collectDayRecords(yearDays)).records;
-    const yearDaysKeys = yearDays.map(dateKey);
-    const doneYear = doneByDay(yearDaysKeys, yearRecords);
-    const panelSections = config.sections.filter((s) => s.panel === true);
+    const panelSections = config.journals.daily.sections.filter((s) => s.panel === true);
     const entries = panelSections.length ? await index.collectEntries(this.period.days, panelSections) : [];
-    const entryCounts = /* @__PURE__ */ new Map();
-    for (const e of entries) {
-      entryCounts.set(e.date, ((_a = entryCounts.get(e.date)) != null ? _a : 0) + 1);
-    }
-    renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), this.plugin);
-    const cards = body.createDiv({ cls: "qj-cards" });
-    const tasks = taskStats(days, records);
-    const taskCard = cardShell(cards, t("\u4EFB\u52A1"));
-    const grid = taskCard.createDiv({ cls: "qj-metric-grid" });
-    for (const m of [
-      { label: t("\u5B8C\u6210"), value: tasks.doneInPeriod },
-      { label: t("\u65B0\u5EFA"), value: tasks.createdInPeriod },
-      { label: t("\u8BB0\u5F55"), value: `${tasks.done}/${tasks.total}` }
-    ]) {
-      const cell = grid.createDiv({ cls: "qj-metric" });
-      cell.createSpan({ cls: "qj-metric-value", text: String(m.value) });
-      cell.createSpan({ cls: "qj-metric-label", text: m.label });
-    }
-    if (this.kind === "year") {
-      const byMonth = /* @__PURE__ */ new Map();
-      for (const [day, n] of doneYear) {
-        const m = Number(day.slice(5, 7)) - 1;
-        byMonth.set(m, ((_b = byMonth.get(m)) != null ? _b : 0) + n);
-      }
-      renderBarChart(
-        cards,
-        Array.from({ length: 12 }, (_, m) => {
-          var _a2;
-          return {
-            label: String(m + 1).padStart(2, "0"),
-            value: (_a2 = byMonth.get(m)) != null ? _a2 : 0
-          };
-        })
-      );
-    } else {
-      renderBarChart(
-        cards,
-        days.map((d) => {
-          var _a2;
-          return { label: d.slice(8), value: (_a2 = doneYear.get(d)) != null ? _a2 : 0 };
-        })
-      );
-    }
-    renderCheckin(cards, config.sections, days, records);
-    const trendFields = config.sections.filter((s) => s.type === "data").flatMap((s) => {
-      const stats = numberStats(s.fields, days, records);
-      return stats.filter((st) => st.count > 0).map((st) => {
-        var _a2;
-        const values = /* @__PURE__ */ new Map();
-        for (const day of days) {
-          const raw = (_a2 = records.get(day)) == null ? void 0 : _a2.fieldValues[st.key];
-          if (raw === void 0 || raw === "") continue;
-          const n = Number(raw);
-          if (Number.isFinite(n)) values.set(day, n);
-        }
-        return { label: st.label, unit: st.unit, values, days };
-      });
-    });
-    if (trendFields.length > 0) renderTrend(cards, trendFields);
-    renderCalendar(
-      cards,
-      this.app,
-      config.dailyDir,
-      this.period.start.getFullYear(),
-      this.period.start.getMonth(),
-      doneYear,
-      new Set(yearRecords.keys())
-    );
-    renderHeatmap(cards, t("\u4EFB\u52A1\u5B8C\u6210\u70ED\u529B\u56FE"), yearDaysKeys, doneYear);
-    if (panelSections.length > 0) {
-      renderHeatmap(cards, t("\u5185\u5BB9\u8BB0\u5F55\u70ED\u529B\u56FE"), days, entryCounts);
-    }
-    renderFeedMini(cards, this.plugin, entries);
     const texts = await index.periodTexts(this.period.days);
-    const blocks = dedupeQueries(
-      texts.flatMap(({ date, text }) => findQueryBlocks(text, `${config.dailyDir}/${date}.md`))
+    const queries = dedupeQueries(
+      texts.flatMap(
+        ({ date, text }) => findQueryBlocks(text, `${config.journals.daily.dir}/${date}.md`)
+      )
     );
-    await renderQueryPanel(cards, this.app, blocks, this);
+    const ctx = {
+      plugin: this.plugin,
+      kind: this.kind,
+      days,
+      records,
+      entries,
+      component: this,
+      editing: this.editing,
+      rerender: () => void this.render()
+    };
+    const defs = this.components();
+    const visible = config.summaryLayout.map((id) => defs.find((d) => d.id === id)).filter((d) => d !== void 0).filter((d) => d.kinds === void 0 || d.kinds.includes(this.kind));
+    const cards = body.createDiv({ cls: "qj-cards" });
+    if (this.editing) cards.addClass("is-editing");
+    for (const def of visible) {
+      const wrap = cards.createDiv({ cls: "qj-card-wrap" });
+      if (this.editing) this.attachEditChrome(wrap, def.id, def.title);
+      const card = wrap.createDiv({ cls: "qj-card" });
+      if (def.id !== "quick-capture" && def.id !== "task-chart") {
+        card.createDiv({ cls: "qj-card-title", text: def.title });
+      }
+      await def.render(card, ctx, { queries });
+    }
+    if (this.editing) this.renderAddPalette(cards, defs);
+  }
+  /** 编辑模式外框：拖拽手柄 + 删除钮；拖放重排保存进 config。 */
+  attachEditChrome(wrap, id, _title) {
+    const chrome = wrap.createDiv({ cls: "qj-card-chrome" });
+    const handle = chrome.createEl("button", { cls: "qj-feed-btn" });
+    handle.type = "button";
+    handle.setAttribute("aria-label", t("\u62D6\u52A8\u6392\u5E8F"));
+    (0, import_obsidian7.setIcon)(handle, "grip-vertical");
+    wrap.setAttribute("data-qj-component", id);
+    const del = chrome.createEl("button", { cls: "qj-feed-btn" });
+    del.type = "button";
+    del.setAttribute("aria-label", t("\u5220\u9664"));
+    (0, import_obsidian7.setIcon)(del, "trash-2");
+    del.onclick = async () => {
+      const layout = this.plugin.config.summaryLayout;
+      this.plugin.config.summaryLayout = layout.filter((x) => x !== id);
+      await this.plugin.saveConfig();
+      void this.render();
+    };
+    handle.draggable = true;
+    wrap.ondragover = (evt) => {
+      evt.preventDefault();
+      wrap.addClass("is-drop-target");
+    };
+    wrap.ondragleave = () => wrap.removeClass("is-drop-target");
+    wrap.ondrop = (evt) => {
+      evt.preventDefault();
+      wrap.removeClass("is-drop-target");
+      const from = this.dragId;
+      const to = wrap.getAttribute("data-qj-component");
+      this.dragId = null;
+      if (from === null || to === null || from === to) return;
+      const layout = [...this.plugin.config.summaryLayout];
+      const fromIdx = layout.indexOf(from);
+      const toIdx = layout.indexOf(to);
+      if (fromIdx < 0 || toIdx < 0) return;
+      layout.splice(toIdx, 0, ...layout.splice(fromIdx, 1));
+      this.plugin.config.summaryLayout = layout;
+      void this.plugin.saveConfig().then(() => this.render());
+    };
+    handle.ondragstart = (evt) => {
+      this.dragId = id;
+      if (evt.dataTransfer) {
+        evt.dataTransfer.setData("text/plain", id);
+        evt.dataTransfer.effectAllowed = "move";
+      }
+    };
+  }
+  /** 编辑模式底部的「添加组件」面板（列出当前布局之外的组件）。 */
+  renderAddPalette(cards, defs) {
+    const hidden = defs.filter((d) => !this.plugin.config.summaryLayout.includes(d.id));
+    const card = cards.createDiv({ cls: "qj-card qj-add-palette" });
+    card.createDiv({ cls: "qj-card-title", text: t("\u6DFB\u52A0\u7EC4\u4EF6") });
+    if (hidden.length === 0) {
+      card.createDiv({ cls: "qj-muted", text: t("\u6240\u6709\u7EC4\u4EF6\u5747\u5DF2\u663E\u793A") });
+      return;
+    }
+    const row = card.createDiv({ cls: "qj-capture-row" });
+    for (const def of hidden) {
+      const btn = row.createEl("button", { cls: "qj-btn", text: `+ ${def.title}` });
+      btn.type = "button";
+      btn.onclick = async () => {
+        this.plugin.config.summaryLayout.push(def.id);
+        await this.plugin.saveConfig();
+        void this.render();
+      };
+    }
   }
 };
 
@@ -1863,7 +2232,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     this.render();
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof import_obsidian9.TFile && file.path.startsWith(this.plugin.config.dailyDir)) {
+        if (file instanceof import_obsidian9.TFile && file.path.startsWith(this.plugin.config.journals.daily.dir)) {
           this.scheduleRefresh();
         }
       })
@@ -1874,7 +2243,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     super.onunload();
   }
   panelSections() {
-    return this.plugin.config.sections.filter(
+    return this.plugin.config.journals.daily.sections.filter(
       (s) => s.panel === true && (s.type === "text" || s.type === "list" || s.type === "paragraph")
     );
   }
@@ -1997,11 +2366,12 @@ var PanelView = class extends import_obsidian9.ItemView {
         }).open();
         return;
       }
-      await this.plugin.performCapture(section, { values: {}, lineValue: value }, true);
+      await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true);
       await this.loadFeed();
       return;
     }
     const result = await this.plugin.capture.performSection(
+      "daily",
       section,
       { values: {}, lineValue: value },
       { overwrite: false }
@@ -2020,7 +2390,7 @@ var PanelView = class extends import_obsidian9.ItemView {
       this.renderFeed();
       return;
     }
-    const index = new VaultIndex(this.app, this.plugin.config.dailyDir);
+    const index = new VaultIndex(this.app, this.plugin.config.journals.daily.dir);
     const today = /* @__PURE__ */ new Date();
     const days = Array.from({ length: this.rangeDays }, (_, i) => {
       const d = new Date(today);
@@ -2126,7 +2496,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     };
   }
   jumpTo(date) {
-    const file = new VaultIndex(this.app, this.plugin.config.dailyDir).dailyFile(date);
+    const file = new VaultIndex(this.app, this.plugin.config.journals.daily.dir).dailyFile(date);
     if (file) void this.app.workspace.getLeaf(false).openFile(file);
   }
   editEntry(section, entry) {
@@ -2244,6 +2614,12 @@ function detectedToSections(detected) {
 
 // src/settings.ts
 var TYPE_LABEL = {
+  daily: "\u65E5\u65E5\u5FD7",
+  weekly: "\u5468",
+  monthly: "\u6708",
+  annual: "\u5E74"
+};
+var SECTION_TYPE_LABEL = {
   checkin: "\u6253\u5361",
   data: "\u6570\u636E",
   text: "\u6587\u672C",
@@ -2254,6 +2630,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
+    this.tab = "daily";
   }
   display() {
     this.containerEl.empty();
@@ -2275,40 +2652,27 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         this.display();
       });
     });
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u65E5\u65E5\u5FD7\u76EE\u5F55")).addText((text) => {
-      text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/540 Daily"));
-      text.setValue(this.plugin.config.dailyDir);
-      text.onChange(async (value) => {
-        this.plugin.config.dailyDir = value.trim();
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u6253\u5F00\u4F4D\u7F6E")).setHeading();
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u6C47\u603B")).addDropdown((drop) => {
+      drop.addOption("tab", t("\u6807\u7B7E\u9875"));
+      drop.addOption("sidebar", t("\u53F3\u4FA7\u8FB9\u680F"));
+      drop.setValue(this.plugin.config.viewLocations.summary);
+      drop.onChange(async (value) => {
+        this.plugin.config.viewLocations.summary = value;
         await this.plugin.saveConfig();
       });
     });
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u6A21\u677F\u7B14\u8BB0")).setDesc(t("\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E")).addText((text) => {
-      text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/TPL-Daily.md"));
-      text.setValue(this.plugin.config.templateNote);
-      text.onChange(async (value) => {
-        this.plugin.config.templateNote = value.trim();
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u901F\u8BB0\u9762\u677F")).addDropdown((drop) => {
+      drop.addOption("tab", t("\u6807\u7B7E\u9875"));
+      drop.addOption("sidebar", t("\u53F3\u4FA7\u8FB9\u680F"));
+      drop.setValue(this.plugin.config.viewLocations.panel);
+      drop.onChange(async (value) => {
+        this.plugin.config.viewLocations.panel = value;
         await this.plugin.saveConfig();
       });
-    }).addButton(
-      (btn) => btn.setButtonText(t("\u4ECE\u6A21\u677F\u8BC6\u522B")).setCta().onClick(() => void this.detectFromTemplate())
-    );
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
-    for (const section of this.plugin.config.sections) {
-      this.sectionEditor(section);
-    }
-    new import_obsidian10.Setting(this.containerEl).addButton(
-      (btn) => btn.setButtonText(t("\u6DFB\u52A0\u6807\u9898\u533A")).onClick(async () => {
-        this.plugin.config.sections.push({
-          id: `sec-${Date.now()}`,
-          heading: "## ",
-          type: "list",
-          fields: []
-        });
-        await this.plugin.saveConfig();
-        this.display();
-      })
-    );
+    });
+    this.renderJournalTabs();
+    this.renderCurrentJournal();
     this.containerEl.createEl("p", {
       cls: "qj-setting-note",
       text: t("\u547D\u4EE4\u5728\u91CD\u8F7D\u63D2\u4EF6\u540E\u6309\u65B0\u914D\u7F6E\u751F\u6548\uFF1B\u5DE5\u5177\u680F\u6309\u94AE\u4E0E\u6C47\u603B\u89C6\u56FE\u5373\u65F6\u751F\u6548\u3002")
@@ -2329,6 +2693,60 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       })
     );
   }
+  /** 日/周/月/年 tab 切换。 */
+  renderJournalTabs() {
+    const tabs = this.containerEl.createDiv({ cls: "qj-journal-tabs" });
+    for (const type of ["daily", "weekly", "monthly", "annual"]) {
+      const btn = tabs.createEl("button", {
+        cls: `qj-btn${this.tab === type ? " is-active" : ""}`,
+        text: t(TYPE_LABEL[type])
+      });
+      btn.type = "button";
+      btn.onclick = () => {
+        this.tab = type;
+        this.display();
+      };
+    }
+  }
+  renderCurrentJournal() {
+    const journal = this.plugin.config.journals[this.tab];
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u76EE\u5F55")).addText((text) => {
+      text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/540 Daily"));
+      text.setValue(journal.dir);
+      text.onChange(async (value) => {
+        journal.dir = value.trim();
+        await this.plugin.saveConfig();
+      });
+    });
+    if (this.tab === "daily") {
+      new import_obsidian10.Setting(this.containerEl).setName(t("\u6A21\u677F\u7B14\u8BB0")).setDesc(t("\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E")).addText((text) => {
+        text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/TPL-Daily.md"));
+        text.setValue(this.plugin.config.templateNote);
+        text.onChange(async (value) => {
+          this.plugin.config.templateNote = value.trim();
+          await this.plugin.saveConfig();
+        });
+      }).addButton(
+        (btn) => btn.setButtonText(t("\u4ECE\u6A21\u677F\u8BC6\u522B")).setCta().onClick(() => void this.detectFromTemplate())
+      );
+    }
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
+    for (const section of journal.sections) {
+      this.sectionEditor(journal, section);
+    }
+    new import_obsidian10.Setting(this.containerEl).addButton(
+      (btn) => btn.setButtonText(t("\u6DFB\u52A0\u6807\u9898\u533A")).onClick(async () => {
+        journal.sections.push({
+          id: `sec-${Date.now()}`,
+          heading: "## ",
+          type: "list",
+          fields: []
+        });
+        await this.plugin.saveConfig();
+        this.display();
+      })
+    );
+  }
   async detectFromTemplate() {
     const path = (0, import_obsidian10.normalizePath)(this.plugin.config.templateNote);
     if (path === "") {
@@ -2346,13 +2764,13 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       new import_obsidian10.Notice(t("\u672A\u8BC6\u522B\u5230\u6807\u9898\u533A"));
       return;
     }
-    this.plugin.config.sections = sections;
+    this.plugin.config.journals.daily.sections = sections;
     await this.plugin.saveConfig();
     const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0);
     new import_obsidian10.Notice(`${t("\u8BC6\u522B\u5230")} ${sections.length} ${t("\u4E2A\u6807\u9898\u533A")}\u3001${fieldCount} ${t("\u4E2A\u5B57\u6BB5")}`);
     this.display();
   }
-  sectionEditor(section) {
+  sectionEditor(journal, section) {
     const container = this.containerEl.createDiv({ cls: "qj-section-editor" });
     new import_obsidian10.Setting(container).addText((text) => {
       text.setPlaceholder("### \u2026");
@@ -2362,8 +2780,14 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         await this.plugin.saveConfig();
       });
     }).addDropdown((drop) => {
-      for (const type of ["checkin", "data", "text", "list", "paragraph"]) {
-        drop.addOption(type, t(TYPE_LABEL[type]));
+      for (const type of [
+        "checkin",
+        "data",
+        "text",
+        "list",
+        "paragraph"
+      ]) {
+        drop.addOption(type, t(SECTION_TYPE_LABEL[type]));
       }
       drop.setValue(section.type);
       drop.onChange(async (value) => {
@@ -2373,13 +2797,12 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       });
     }).addExtraButton(
       (btn) => btn.setIcon("trash-2").setTooltip(t("\u5220\u9664")).onClick(async () => {
-        const sections = this.plugin.config.sections;
-        sections.splice(sections.indexOf(section), 1);
+        journal.sections.splice(journal.sections.indexOf(section), 1);
         await this.plugin.saveConfig();
         this.display();
       })
     );
-    if (section.type === "list" || section.type === "text" || section.type === "paragraph") {
+    if (this.tab === "daily" && (section.type === "list" || section.type === "text" || section.type === "paragraph")) {
       new import_obsidian10.Setting(container).setName(t("\u5F00\u542F\u5185\u5BB9\u6C47\u603B\u9762\u677F")).setDesc(t("\u5728\u901F\u8BB0\u9762\u677F\u91CC\u805A\u5408\u663E\u793A\u8BE5\u6807\u9898\u533A\u7684\u5185\u5BB9")).addToggle(
         (toggle) => toggle.setValue(section.panel === true).onChange(async (value) => {
           section.panel = value ? true : void 0;
@@ -2388,7 +2811,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         })
       );
     }
-    if (section.type === "list" || section.type === "paragraph") {
+    if (this.tab === "daily" && (section.type === "list" || section.type === "paragraph")) {
       new import_obsidian10.Setting(container).setName(t("\u81EA\u52A8\u6DFB\u52A0\u65F6\u95F4\u6233")).setDesc(t("\u8BB0\u5F55\u65F6\u81EA\u52A8\u52A0\u65F6\u95F4\u6233\u524D\u7F00\uFF08HH:mm\uFF09\uFF0C\u901F\u8BB0\u9762\u677F\u4F1A\u89E3\u6790\u5E76\u663E\u793A")).addToggle((toggle) => {
         toggle.setDisabled(section.panel !== true);
         toggle.setValue(section.timestamp === true);
@@ -2409,6 +2832,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       });
       return;
     }
+    if (section.type === "paragraph") return;
     for (const field of section.fields) {
       const row = new import_obsidian10.Setting(container).setClass("qj-field-editor");
       row.addText((text) => {
@@ -2457,6 +2881,12 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
 };
 
 // src/main.ts
+var TYPE_PREFIX2 = {
+  daily: "",
+  weekly: "\u5468 \xB7 ",
+  monthly: "\u6708 \xB7 ",
+  annual: "\u5E74 \xB7 "
+};
 var QuickJournalPlugin = class extends import_obsidian11.Plugin {
   /** obsidian.d.ts 1.8.7 未声明 App.locale（运行时存在），收口在这一个转换里 */
   localeOf(app) {
@@ -2471,7 +2901,7 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     this.addCommand({
       id: "open-summary",
       name: t("\u6253\u5F00\u65E5\u5FD7\u6C47\u603B"),
-      callback: () => void this.activateView(VIEW_TYPE_QJ_SUMMARY)
+      callback: () => void this.openView(VIEW_TYPE_QJ_SUMMARY, this.config.viewLocations.summary)
     });
     this.addCommand({
       id: "open-quick-capture",
@@ -2481,10 +2911,12 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     this.addCommand({
       id: "open-panel",
       name: t("\u6253\u5F00\u901F\u8BB0\u9762\u677F"),
-      callback: () => void this.activateView(VIEW_TYPE_QJ_PANEL)
+      callback: () => void this.openView(VIEW_TYPE_QJ_PANEL, this.config.viewLocations.panel)
     });
-    for (const section of this.config.sections) {
-      this.addSectionCommand(section);
+    for (const type of ["daily", "weekly", "monthly", "annual"]) {
+      for (const section of this.config.journals[type].sections) {
+        this.addSectionCommand(type, section);
+      }
     }
     this.addRibbonIcon("notebook-pen", t("\u5FEB\u901F\u5F55\u5165"), () => this.openPicker());
     this.addSettingTab(new QJSettingTab(this.app, this));
@@ -2501,26 +2933,26 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
   openPicker() {
     new ActionPickerModal(
       this.app,
-      this.config.sections,
-      (section) => this.openSectionCapture(section)
+      this.config.journals.daily.sections,
+      (section) => this.openSectionCapture("daily", section)
     ).open();
   }
-  addSectionCommand(section) {
+  addSectionCommand(type, section) {
     this.addCommand({
       id: `qj-${section.id}`,
-      name: `${t("\u5FEB\u901F\u5F55\u5165")}: ${section.heading.replace(/^#+\s*/, "")}`,
-      callback: () => this.openSectionCapture(section)
+      name: `${t("\u5FEB\u901F\u5F55\u5165")}: ${TYPE_PREFIX2[type]}${section.heading.replace(/^#+\s*/, "")}`,
+      callback: () => this.openSectionCapture(type, section)
     });
   }
-  openSectionCapture(section) {
+  openSectionCapture(type, section) {
     if (section.type === "paragraph") {
-      void this.capture.paragraphContent(dateKey(/* @__PURE__ */ new Date()), section).then((initial) => {
+      void this.capture.paragraphContent(this.currentKey(type), section).then((initial) => {
         new CaptureModal(
           this.app,
           section.heading.replace(/^#+\s*/, ""),
           section.type,
           section.fields,
-          (payload) => void this.performCapture(section, payload, true),
+          (payload) => void this.performCapture(type, section, payload, true),
           initial
         ).open();
       });
@@ -2531,12 +2963,22 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       section.heading.replace(/^#+\s*/, ""),
       section.type,
       section.fields,
-      (payload) => void this.performCapture(section, payload, false)
+      (payload) => void this.performCapture(type, section, payload, false)
     ).open();
   }
+  /** 各类型「当天」的键（段落预填定位用）。 */
+  currentKey(type) {
+    if (type === "daily") return dateKey(/* @__PURE__ */ new Date());
+    const now = /* @__PURE__ */ new Date();
+    if (type === "weekly") {
+      return this.capture.weeklyPath(now).split("/").pop().replace(/\.md$/, "");
+    }
+    if (type === "monthly") return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return String(now.getFullYear());
+  }
   /** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */
-  async performCapture(section, payload, overwrite) {
-    const result = await this.capture.performSection(section, payload, { overwrite });
+  async performCapture(type, section, payload, overwrite) {
+    const result = await this.capture.performSection(type, section, payload, { overwrite });
     if (result.ok) {
       const note = result.created ? `${t("\u521B\u5EFA\u7B14\u8BB0")} \xB7 ` : "";
       new import_obsidian11.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);
@@ -2547,21 +2989,41 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
         this.app,
         t("\u4EE5\u4E0B\u5B57\u6BB5\u5DF2\u6709\u503C\uFF0C\u8986\u76D6\u5199\u5165\uFF1F"),
         result.keys.join("\n"),
-        () => void this.performCapture(section, payload, true)
+        () => void this.performCapture(type, section, payload, true)
       ).open();
       return;
     }
     new import_obsidian11.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
   }
-  /** 打开（或聚焦）某个视图；组件卡里的入口也用它。 */
-  async openView(viewType) {
+  /** 打开（或聚焦）某个视图；位置按设置（标签页 / 右侧边栏）。 */
+  async openView(viewType, location = "tab") {
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(viewType);
-    const leaf = existing.length > 0 ? existing[0] : workspace.getLeaf("tab");
+    let leaf = existing.length > 0 ? existing[0] : null;
+    if (leaf === null) {
+      leaf = location === "sidebar" ? workspace.getRightLeaf(false) : workspace.getLeaf("tab");
+    }
+    if (leaf === null) return;
     await leaf.setViewState({ type: viewType, active: true });
     await workspace.revealLeaf(leaf);
   }
-  async activateView(viewType) {
-    await this.openView(viewType);
+  /** 打开某期间的日志/复盘笔记（不存在则按该类型标题区建骨架）。月历的年/月/周入口用。 */
+  async openPeriodNote(type, key) {
+    const dir = this.config.journals[type].dir.replace(/\/+$/, "");
+    const path = `${dir}/${key}.md`;
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    let file;
+    if (existing instanceof import_obsidian11.TFile) {
+      file = existing;
+    } else {
+      const period = periodFromKey(key);
+      if (period === null) {
+        new import_obsidian11.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${key}`);
+        return;
+      }
+      const skeleton = skeletonFor(type, period.start, this.config.journals[type].sections);
+      file = await ensureNote(this.app, path, skeleton);
+    }
+    await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
