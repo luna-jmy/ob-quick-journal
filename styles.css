@@ -297,3 +297,94 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
 }
+
+.qj-section-editor {
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: var(--size-4-2);
+	margin-bottom: var(--size-4-2);
+}
+
+/* ── 速记面板（Thino 式内容流） ────────────────────────────────────────── */
+
+.qj-panel-root {
+	padding: var(--size-4-2);
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.qj-feed-toolbar {
+	display: flex;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-2-3);
+}
+
+.qj-panel-input {
+	display: flex;
+	gap: var(--size-2-2);
+	align-items: flex-end;
+	margin-bottom: var(--size-4-3);
+}
+
+.qj-panel-input .qj-textarea {
+	flex: 1 1 auto;
+	min-height: 3.2em;
+}
+
+.qj-send-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: var(--size-2-2) var(--size-4-2);
+}
+
+.qj-feed {
+	flex: 1 1 auto;
+	overflow-y: auto;
+}
+
+.qj-feed-day {
+	margin-bottom: var(--size-4-3);
+}
+
+.qj-feed-day-label {
+	display: inline-block;
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-bold);
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin-bottom: var(--size-2-2);
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: var(--size-2-1);
+	width: 100%;
+}
+
+.qj-feed-item {
+	padding: var(--size-2-2) var(--size-2-3);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.qj-feed-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.qj-feed-meta {
+	display: flex;
+	gap: var(--size-2-2);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint, var(--text-muted));
+	margin-bottom: var(--size-1-1, 2px);
+}
+
+.qj-feed-label::before {
+	content: "· ";
+}
+
+.qj-feed-text {
+	color: var(--text-normal);
+	font-size: var(--font-ui-medium);
+	white-space: pre-wrap;
+	word-break: break-word;
+}

@@ -12,11 +12,13 @@ import { CaptureModal } from "./ui/capture-modal";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { ActionPickerModal } from "./ui/action-picker-modal";
 import { SummaryView, VIEW_TYPE_QJ_SUMMARY } from "./views/summary-view";
+import { PanelView, VIEW_TYPE_QJ_PANEL } from "./views/panel-view";
 import { QJSettingTab } from "./settings";
 
 export default class QuickJournalPlugin extends Plugin {
 	config!: QJConfig;
-	private capture!: CaptureService;
+	/** 面板视图直发用；其余走 openSectionCapture 的弹窗流程 */
+	capture!: CaptureService;
 
 	/** obsidian.d.ts 1.8.7 未声明 App.locale（运行时存在），收口在这一个转换里 */
 	private localeOf(app: unknown): string | undefined {
@@ -29,28 +31,50 @@ export default class QuickJournalPlugin extends Plugin {
 		this.capture = new CaptureService(this.app, () => this.config);
 
 		this.registerView(VIEW_TYPE_QJ_SUMMARY, (leaf: WorkspaceLeaf) => new SummaryView(leaf, this));
+		this.registerView(VIEW_TYPE_QJ_PANEL, (leaf: WorkspaceLeaf) => new PanelView(leaf, this));
 
 		this.addCommand({
 			id: "open-summary",
 			name: t("打开日志汇总"),
-			callback: () => void this.activateSummary(),
+			callback: () => void this.activateView(VIEW_TYPE_QJ_SUMMARY),
+		});
+
+		this.addCommand({
+			id: "open-quick-capture",
+			name: t("打开快速录入"),
+			callback: () => this.openPicker(),
+		});
+
+		this.addCommand({
+			id: "open-panel",
+			name: t("打开速记面板"),
+			callback: () => void this.activateView(VIEW_TYPE_QJ_PANEL),
 		});
 
 		for (const section of this.config.sections) {
 			this.addSectionCommand(section);
 		}
 
-		this.addRibbonIcon("notebook-pen", t("快速录入"), () => {
-			new ActionPickerModal(this.app, this.config.sections, (section) =>
-				this.openSectionCapture(section),
-			).open();
-		});
+		this.addRibbonIcon("notebook-pen", t("快速录入"), () => this.openPicker());
 
 		this.addSettingTab(new QJSettingTab(this.app, this));
 	}
 
 	async saveConfig(): Promise<void> {
 		await this.saveData(this.config);
+	}
+
+	/** 恢复出厂配置（保留已写入笔记的内容，只重置 data.json）。 */
+	async resetConfig(): Promise<void> {
+		this.config = mergeConfig(undefined);
+		await this.saveData(this.config);
+		setLanguage(this.config.language, () => this.localeOf(this.app));
+	}
+
+	openPicker(): void {
+		new ActionPickerModal(this.app, this.config.sections, (section) =>
+			this.openSectionCapture(section),
+		).open();
 	}
 
 	private addSectionCommand(section: JournalSection): void {
@@ -94,11 +118,11 @@ export default class QuickJournalPlugin extends Plugin {
 		new Notice(`${t("写入失败")}: ${result.message}`);
 	}
 
-	private async activateSummary(): Promise<void> {
+	private async activateView(viewType: string): Promise<void> {
 		const { workspace } = this.app;
-		const existing = workspace.getLeavesOfType(VIEW_TYPE_QJ_SUMMARY);
+		const existing = workspace.getLeavesOfType(viewType);
 		const leaf = existing.length > 0 ? existing[0] : workspace.getLeaf("tab");
-		await leaf.setViewState({ type: VIEW_TYPE_QJ_SUMMARY, active: true });
+		await leaf.setViewState({ type: viewType, active: true });
 		await workspace.revealLeaf(leaf);
 	}
 }

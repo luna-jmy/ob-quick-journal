@@ -10,7 +10,8 @@ export class ConfirmModal extends Modal {
 		app: Modal["app"],
 		private title: string,
 		private body: string,
-		private onAccept: () => void,
+		private onAccept: () => void | Promise<void>,
+		private acceptLabel = t("覆盖"),
 	) {
 		super(app);
 	}
@@ -24,12 +25,12 @@ export class ConfirmModal extends Modal {
 		cancel.onclick = () => this.close();
 		const accept = footer.createEl("button", {
 			cls: "qj-btn qj-btn-primary",
-			text: t("覆盖"),
+			text: this.acceptLabel,
 		});
 		accept.type = "button";
 		accept.onclick = () => {
 			this.close();
-			this.onAccept();
+			void this.onAccept();
 		};
 	}
 }

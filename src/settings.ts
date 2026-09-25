@@ -8,6 +8,7 @@ import { Notice, PluginSettingTab, Setting, TFile, normalizePath, type App } fro
 import type QuickJournalPlugin from "./main";
 import type { JournalSection, SectionType } from "./types";
 import { detectedToSections, detectSections } from "./parse/detect-sections";
+import { ConfirmModal } from "./ui/confirm-modal";
 import { setLanguage, t } from "./i18n";
 
 const TYPE_LABEL: Record<SectionType, string> = {
@@ -92,6 +93,25 @@ export class QJSettingTab extends PluginSettingTab {
 			cls: "qj-setting-note",
 			text: t("命令在重载插件后按新配置生效；工具栏按钮与汇总视图即时生效。"),
 		});
+
+		new Setting(this.containerEl).addButton((btn) =>
+			btn
+				.setButtonText(t("恢复默认设置"))
+				.setWarning()
+				.onClick(() => {
+					new ConfirmModal(
+						this.app,
+						t("恢复默认设置"),
+						t("恢复默认设置说明"),
+						async () => {
+							await this.plugin.resetConfig();
+							new Notice(t("已恢复默认设置，重载插件后命令按新配置生效。"));
+							this.display();
+						},
+						t("恢复"),
+					).open();
+				}),
+		);
 	}
 
 	private async detectFromTemplate(): Promise<void> {
@@ -149,6 +169,18 @@ export class QJSettingTab extends PluginSettingTab {
 					this.display();
 				}),
 			);
+
+		if (section.type === "list" || section.type === "text") {
+			new Setting(container)
+				.setName(t("开启内容汇总面板"))
+				.setDesc(t("在速记面板里聚合显示该标题区的内容"))
+				.addToggle((toggle) =>
+					toggle.setValue(section.panel === true).onChange(async (value) => {
+						section.panel = value ? true : undefined;
+						await this.plugin.saveConfig();
+					}),
+				);
+		}
 
 		if (section.type === "list") {
 			new Setting(container)

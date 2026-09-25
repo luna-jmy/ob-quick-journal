@@ -5,9 +5,11 @@
 
 import { TFile, type App } from "obsidian";
 import { parseFieldLines } from "../parse/field-lines";
+import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { parseNoteDateKind } from "../periods/period";
 import { dateKey } from "../periods/period";
 import type { DayRecord } from "../metrics/day-record";
+import type { JournalSection } from "../types";
 
 export interface CollectResult {
 	records: Map<string, DayRecord>;
@@ -53,6 +55,31 @@ export class VaultIndex {
 			records.set(key, { date: key, fieldValues: fields, taskLines });
 		}
 		return { records, mtimeFallback };
+	}
+
+	/** 速记面板用：期间逐日的标题区内容条目（只采集，不做判断）。 */
+	async collectEntries(days: Date[], sections: JournalSection[]): Promise<SectionEntry[]> {
+		const byDate = new Map<string, TFile>();
+		for (const file of this.filesUnder(this.dailyDir)) {
+			const date = this.resolveDate(file);
+			if (date) byDate.set(date, file);
+		}
+		const entries: SectionEntry[] = [];
+		for (const day of days) {
+			const file = byDate.get(dateKey(day));
+			if (!file) continue;
+			const text = await this.app.vault.cachedRead(file);
+			entries.push(...collectEntries(dateKey(day), text.split(/\r?\n/), sections));
+		}
+		return entries;
+	}
+
+	/** 按日期键打开日志笔记。 */
+	dailyFile(dateStr: string): TFile | null {
+		const file = this.app.vault.getAbstractFileByPath(
+			`${this.dailyDir.replace(/\/+$/, "")}/${dateStr}.md`,
+		);
+		return file instanceof TFile ? file : null;
 	}
 
 	private resolveDate(file: TFile): string | null {

@@ -29,6 +29,8 @@ export interface JournalSection {
 	fields: SectionField[];
 	/** list 类型用：追加行模板，默认 `- {{value}}`（GTD 等任务区可设 `- [ ] {{value}}`） */
 	lineTemplate?: string;
+	/** 文本/列表类型可开：在速记面板里聚合该标题区的内容 */
+	panel?: boolean;
 }
 
 export interface QJConfig {
@@ -76,6 +78,7 @@ export const DEFAULT_SECTIONS: JournalSection[] = [
 			{ key: "今天印象最深刻的事", label: "印象最深" },
 			{ key: "明天想改进的事", label: "明天改进" },
 		],
+		panel: true,
 	},
 	{
 		id: "gtd",
@@ -89,6 +92,7 @@ export const DEFAULT_SECTIONS: JournalSection[] = [
 		heading: "## 💡 灵感与思考",
 		type: "list",
 		fields: [],
+		panel: true,
 	},
 ];
 
@@ -121,7 +125,15 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 				}))
 		: [];
 	const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : undefined;
-	return { id, heading, type, fields, ...(lineTemplate ? { lineTemplate } : {}) };
+	const panel = raw.panel === true ? true : undefined;
+	return {
+		id,
+		heading,
+		type,
+		fields,
+		...(lineTemplate ? { lineTemplate } : {}),
+		...(panel ? { panel } : {}),
+	};
 }
 
 /** 深合并用户保存的 config 到默认值上（逐级兜底；v0.1 的 registry/actions 自动迁移）。 */
