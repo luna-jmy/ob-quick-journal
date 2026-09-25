@@ -61,7 +61,10 @@ export class PanelView extends ItemView {
 		this.render();
 		this.registerEvent(
 			this.app.vault.on("modify", (file) => {
-				if (file instanceof TFile && file.path.startsWith(this.plugin.config.dailyDir)) {
+				if (
+					file instanceof TFile &&
+					file.path.startsWith(this.plugin.config.journals.daily.dir)
+				) {
 					this.scheduleRefresh();
 				}
 			}),
@@ -74,7 +77,7 @@ export class PanelView extends ItemView {
 	}
 
 	private panelSections(): JournalSection[] {
-		return this.plugin.config.sections.filter(
+		return this.plugin.config.journals.daily.sections.filter(
 			(s) =>
 				s.panel === true &&
 				(s.type === "text" || s.type === "list" || s.type === "paragraph"),
@@ -220,12 +223,13 @@ export class PanelView extends ItemView {
 				}).open();
 				return;
 			}
-			await this.plugin.performCapture(section, { values: {}, lineValue: value }, true);
+			await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true);
 			await this.loadFeed();
 			return;
 		}
 
 		const result = await this.plugin.capture.performSection(
+			"daily",
 			section,
 			{ values: {}, lineValue: value },
 			{ overwrite: false },
@@ -246,7 +250,7 @@ export class PanelView extends ItemView {
 			this.renderFeed();
 			return;
 		}
-		const index = new VaultIndex(this.app, this.plugin.config.dailyDir);
+		const index = new VaultIndex(this.app, this.plugin.config.journals.daily.dir);
 		const today = new Date();
 		const days = Array.from({ length: this.rangeDays }, (_, i) => {
 			const d = new Date(today);
@@ -368,7 +372,7 @@ export class PanelView extends ItemView {
 	}
 
 	private jumpTo(date: string): void {
-		const file = new VaultIndex(this.app, this.plugin.config.dailyDir).dailyFile(date);
+		const file = new VaultIndex(this.app, this.plugin.config.journals.daily.dir).dailyFile(date);
 		if (file) void this.app.workspace.getLeaf(false).openFile(file);
 	}
 

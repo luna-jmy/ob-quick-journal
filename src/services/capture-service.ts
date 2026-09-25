@@ -1,10 +1,11 @@
 /**
- * 捕获编排：标题区 → 定位当天日志 →（不存在则建骨架）→ 纯函数出计划 → 原子落盘。
- * 界面只管收表单值；覆盖确认由调用方二次调用（overwrite: true）完成。
+ * 捕获编排：标题区（带所属日志类型）→ 定位目标笔记 →（不存在则建骨架）→
+ * 纯函数出计划 → 原子落盘。界面只管收表单值；覆盖确认由调用方二次调用完成；
+ * 段落类型重发即编辑（预填），不走覆盖确认。
  */
 
 import { TFile, type App } from "obsidian";
-import type { JournalSection, QJConfig } from "../types";
+import type { JournalSection, PeriodType, QJConfig } from "../types";
 import {
 	planAppend,
 	planDeleteLineAt,
@@ -13,8 +14,7 @@ import {
 	planParagraph,
 	type WritePlan,
 } from "../capture/plan";
-import { targetNotePath } from "../capture/variables";
-import { dailySkeleton } from "../capture/skeleton";
+import { noteKeyFor, skeletonFor } from "../capture/skeleton";
 import { renderFieldLine } from "../parse/field-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { convertListTask, toggleTaskLine } from "../parse/line-ops";
@@ -34,24 +34,39 @@ export class CaptureService {
 		private getConfig: () => QJConfig,
 	) {}
 
+	private journal(type: PeriodType) {
+		return this.getConfig().journals[type];
+	}
+
+	notePath(type: PeriodType, now: Date): string {
+		const dir = this.journal(type).dir.replace(/\/+$/, "");
+		return `${dir}/${noteKeyFor(type, now)}.md`;
+	}
+
+	/** 兼容旧调用（面板 / 日志定位用）。 */
 	dailyPath(now: Date): string {
-		return targetNotePath(this.getConfig().dailyDir, "{{date}}", now);
+		return this.notePath("daily", now);
+	}
+
+	weeklyPath(now: Date): string {
+		return this.notePath("weekly", now);
 	}
 
 	async performSection(
+		type: PeriodType,
 		section: JournalSection,
 		payload: { values: Record<string, string>; lineValue?: string },
 		opts: { overwrite: boolean; now?: Date },
 	): Promise<CaptureResult> {
 		const now = opts.now ?? new Date();
-		const path = this.dailyPath(now);
+		const path = this.notePath(type, now);
 
 		let text: string;
 		let created = false;
 		try {
 			text = await readNoteText(this.app, path);
 		} catch {
-			const skeleton = dailySkeleton(now, this.getConfig().sections);
+			const skeleton = skeletonFor(type, now, this.journal(type).sections);
 			const file: TFile = await ensureNote(this.app, path, skeleton);
 			created = true;
 			text = await this.app.vault.cachedRead(file);
@@ -114,7 +129,7 @@ export class CaptureService {
 		};
 	}
 
-	/** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。 */
+	/** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */
 	private withTimestamp(section: JournalSection, value: string, now: Date): string {
 		if (section.timestamp !== true) return value;
 		const hh = String(now.getHours()).padStart(2, "0");
@@ -122,47 +137,52 @@ export class CaptureService {
 		return `${hh}:${mm} ${value}`;
 	}
 
-	// ── 速记面板的条目级写回（编辑 / 删除，不跳回日志） ─────────────────────
+	// ── 速记面板的条目级写回（编辑 / 删除 / 切换，不跳回日志） ───────────────
 
-	/** 编辑一条流条目：line/field 原位改行（保留标记与时间戳），paragraph 整段重写。 */
-	async editEntry(section: JournalSection, entry: SectionEntry, content: string): Promise<EntryWriteResult> {
+	async editEntry(
+		section: JournalSection,
+		entry: SectionEntry,
+		content: string,
+	): Promise<EntryWriteResult> {
 		return this.mutateEntry(section, entry, content);
 	}
 
-	/** 删除一条流条目：line 删行，field 清值回空值行，paragraph 清空整段。 */
 	async deleteEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
 		return this.mutateEntry(section, entry, null);
 	}
 
 	/** 切换任务完成态（面板点击状态符号）。 */
 	async toggleTaskEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
-		return this.rewriteRawLine(section, entry, (raw) => {
-			const today = dateKey(new Date());
-			return toggleTaskLine(raw, today);
-		});
+		return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(new Date())));
 	}
 
 	/** 列表 ↔ 任务互转（面板条目按钮）。 */
 	async convertEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
-		return this.rewriteRawLine(section, entry, convertListTask);
+		return this.rewriteRawLine(entry, convertListTask);
+	}
+
+	private entryPath(entry: SectionEntry): string {
+		return `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
+	}
+
+	private async readLines(path: string): Promise<string[] | null> {
+		try {
+			return (await readNoteText(this.app, path)).split(/\r?\n/);
+		} catch {
+			return null;
+		}
 	}
 
 	private async rewriteRawLine(
-		_section: JournalSection,
 		entry: SectionEntry,
 		build: (raw: string) => string | null,
 	): Promise<EntryWriteResult> {
 		if (entry.lineIndex === undefined || entry.raw === undefined) {
 			return { ok: false, message: "not a line entry" };
 		}
-		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
-		let text: string;
-		try {
-			text = await readNoteText(this.app, path);
-		} catch {
-			return { ok: false, message: `note not found: ${entry.date}` };
-		}
-		const lines = text.split(/\r?\n/);
+		const path = this.entryPath(entry);
+		const lines = await this.readLines(path);
+		if (lines === null) return { ok: false, message: `note not found: ${entry.date}` };
 		if (entry.lineIndex >= lines.length || lines[entry.lineIndex] !== entry.raw) {
 			return { ok: false, message: "stale-line" };
 		}
@@ -174,19 +194,12 @@ export class CaptureService {
 
 	/** 段落「重发 = 编辑」：取当天段落现有内容做表单预填（空返回 ""）。 */
 	async paragraphContent(dateStr: string, section: JournalSection): Promise<string> {
-		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${dateStr}.md`;
-		let text: string;
-		try {
-			text = await readNoteText(this.app, path);
-		} catch {
-			return "";
-		}
-		const entries = collectEntries(
-			dateStr,
-			text.split(/\r?\n/),
-			[section],
-		);
-		return entries[0]?.content ?? "";
+		const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "paragraph", text: "" });
+		const lines = await this.readLines(path);
+		if (lines === null) return "";
+		// 段落条目的 text 即去掉时间戳后的整段内容
+		const entries = collectEntries(dateStr, lines, [section]);
+		return entries[0]?.text ?? "";
 	}
 
 	private async mutateEntry(
@@ -194,7 +207,7 @@ export class CaptureService {
 		entry: SectionEntry,
 		content: string | null,
 	): Promise<EntryWriteResult> {
-		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
+		const path = this.entryPath(entry);
 		let text: string;
 		try {
 			text = await readNoteText(this.app, path);

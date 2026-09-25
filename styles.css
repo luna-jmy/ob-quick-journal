@@ -438,9 +438,39 @@
 
 /* ── 速记面板工具栏扩展 ────────────────────────────────────────────────── */
 
+.qj-feed-toolbar {
+	flex-wrap: wrap;
+}
+
 .qj-search {
-	max-width: 12em;
+	flex: 1 1 10em;
+	max-width: 16em;
+	min-width: 8em;
 	padding: var(--size-2-1) var(--size-2-2);
+}
+
+/* 窄屏：输入条换行、搜索独占一行、发送按钮贴右 */
+@media (max-width: 520px) {
+	.qj-panel-input {
+		flex-wrap: wrap;
+	}
+
+	.qj-panel-input .qj-textarea {
+		flex-basis: 100%;
+	}
+
+	.qj-search {
+		flex-basis: 100%;
+		max-width: none;
+	}
+
+	.qj-send-btn {
+		margin-left: auto;
+	}
+
+	.qj-feed-actions {
+		opacity: 1;
+	}
 }
 
 /* 完成切换按钮：唯一的方框——正文不再渲染状态符号，hover 有明确反馈 */
@@ -474,11 +504,10 @@
 	gap: var(--size-2-2);
 }
 
-/* ── 柱状图 ───────────────────────────────────────────────────────────── */
+/* ── 柱状图（固定绘图区 + 独立标签行，基线对齐） ──────────────────────── */
 
 .qj-bars {
 	display: flex;
-	align-items: flex-end;
 	gap: 2px;
 	height: 120px;
 }
@@ -487,49 +516,120 @@
 	flex: 1 1 0;
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: flex-end;
-	height: 100%;
 	min-width: 0;
+}
+
+.qj-bar-plot {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	align-items: center;
+}
+
+.qj-bar-count {
+	font-size: 9px;
+	color: var(--text-muted);
+	line-height: 1.2;
 }
 
 .qj-bar-v {
 	width: 100%;
 	background: var(--interactive-accent);
 	border-radius: var(--radius-s) var(--radius-s) 0 0;
-	color: var(--text-on-accent);
-	font-size: 10px;
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	padding-top: 2px;
 	min-height: 2px;
 }
 
 .qj-bar-l {
+	flex: 0 0 auto;
+	height: 14px;
+	line-height: 14px;
+	overflow: hidden;
 	font-size: 9px;
 	color: var(--text-muted);
 	white-space: nowrap;
-	margin-top: 2px;
+	text-align: center;
+	width: 100%;
 }
 
-/* ── 热力图 ───────────────────────────────────────────────────────────── */
+/* ── 热力图（周=大格，月=日历格，年=小格整行） ─────────────────────────── */
 
 .qj-heatmap {
 	display: grid;
 	grid-auto-flow: column;
 	grid-template-rows: repeat(7, 1fr);
 	gap: 2px;
-	justify-content: start;
+	justify-content: stretch;
 	overflow-x: auto;
 	padding-bottom: var(--size-2-1);
 }
 
 .qj-hm-cell {
-	width: 11px;
-	height: 11px;
+	width: 100%;
+	min-width: 8px;
+	aspect-ratio: 1;
 	border-radius: 2px;
 	background: var(--background-modifier-border);
+}
+
+.qj-card--wide {
+	grid-column: 1 / -1;
+}
+
+.qj-hm-week {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: var(--size-2-2);
+}
+
+.qj-hm-big {
+	aspect-ratio: 1;
+	border-radius: var(--radius-m);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	background: var(--background-modifier-border);
+}
+
+.qj-hm-big-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.qj-hm-big-count {
+	font-size: 1.6em;
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
+}
+
+.qj-hm-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+}
+
+.qj-hm-cell-m {
+	aspect-ratio: 1;
+	border-radius: var(--radius-s);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background: var(--background-modifier-border);
+}
+
+.qj-hm-cell-day {
+	font-size: 9px;
+	color: var(--text-muted);
+}
+
+.qj-hm-cell-count {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
 }
 
 .qj-hm-l1 {
@@ -546,6 +646,12 @@
 
 .qj-hm-l4 {
 	background: var(--interactive-accent);
+}
+
+.qj-hm-l4 .qj-hm-cell-day,
+.qj-hm-l4 .qj-hm-big-count,
+.qj-hm-l4 .qj-hm-cell-count {
+	color: var(--text-on-accent);
 }
 
 /* ── 数据趋势（SVG 折线） ─────────────────────────────────────────────── */
@@ -572,10 +678,45 @@
 
 /* ── 月历 ─────────────────────────────────────────────────────────────── */
 
+.qj-cal-title {
+	display: flex;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-2-2);
+}
+
+.qj-cal-chip {
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+	padding: 0 var(--size-2-2);
+	cursor: pointer;
+}
+
+.qj-cal-chip:hover {
+	border-color: var(--interactive-accent);
+	color: var(--text-accent, var(--text-normal));
+}
+
 .qj-cal {
 	display: grid;
-	grid-template-columns: repeat(7, 1fr);
+	grid-template-columns: 1.6em repeat(7, 1fr);
 	gap: 2px;
+}
+
+.qj-cal-weekno {
+	font-size: 9px;
+	color: var(--text-accent, var(--text-muted));
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.qj-cal-weekno:hover {
+	background: var(--background-modifier-hover);
 }
 
 .qj-cal-head {
@@ -675,4 +816,71 @@
 	border-left: 2px solid var(--background-modifier-border);
 	padding-left: var(--size-2-3);
 	overflow-x: auto;
+}
+
+/* ── 汇总编辑模式 ─────────────────────────────────────────────────────── */
+
+.qj-cards.is-editing .qj-card-wrap {
+	position: relative;
+	outline: 1px dashed var(--background-modifier-border);
+	outline-offset: 2px;
+	border-radius: var(--radius-m);
+}
+
+.qj-cards.is-editing .qj-card-wrap.is-drop-target {
+	outline: 2px solid var(--interactive-accent);
+}
+
+.qj-card-chrome {
+	position: absolute;
+	top: var(--size-2-1);
+	right: var(--size-2-1);
+	display: flex;
+	gap: 2px;
+	z-index: 1;
+}
+
+.qj-add-palette {
+	border-style: dashed;
+}
+
+.qj-journal-tabs {
+	display: flex;
+	gap: var(--size-2-2);
+	margin: var(--size-4-3) 0 var(--size-2-3);
+}
+
+.qj-trend-select {
+	margin-bottom: var(--size-2-2);
+	padding: var(--size-2-1) var(--size-2-2);
+}
+
+.qj-checkin-heading {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+	color: var(--text-muted);
+	margin: var(--size-2-2) 0 var(--size-1-1, 2px);
+}
+
+.qj-query-edit-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	margin-bottom: var(--size-2-1);
+}
+
+.qj-query-edit-code {
+	flex: 1 1 auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qj-query-add {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-2);
+	margin-top: var(--size-2-3);
 }

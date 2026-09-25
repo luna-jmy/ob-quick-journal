@@ -6,17 +6,40 @@
 
 import type { App, Component } from "obsidian";
 import type QuickJournalPlugin from "../main";
-import type { JournalSection } from "../types";
+import type { PeriodType, QueryKind } from "../types";
 import type { SectionEntry } from "../parse/section-entries";
 import { taskSymbol } from "../parse/line-ops";
 import type { QueryBlock } from "../parse/query-blocks";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
-import { boolStats, numberStats } from "../metrics/aggregate";
+import { boolStats } from "../metrics/aggregate";
 import type { DayRecord } from "../metrics/day-record";
 import { monthGrid } from "../periods/month-grid";
+import type { PeriodKind } from "../periods/period";
 import { dateKey } from "../periods/period";
 import { t } from "../i18n";
+
+export interface SummaryCtx {
+	plugin: QuickJournalPlugin;
+	/** 当前期间类型（决定热力图形态、柱状图粒度、月历是否出现） */
+	kind: PeriodKind;
+	days: string[];
+	records: Map<string, DayRecord>;
+	entries: SectionEntry[];
+	/** 视图自身（MarkdownRenderer / executeJs 的组件归属） */
+	component: Component;
+	/** 编辑模式（查询块显示录入 UI 而不是渲染结果） */
+	editing: boolean;
+	/** 编辑操作后重渲染整个视图 */
+	rerender: () => void;
+}
+
+const TYPE_PREFIX: Record<PeriodType, string> = {
+	daily: "",
+	weekly: "周 · ",
+	monthly: "月 · ",
+	annual: "年 · ",
+};
 
 export function cardShell(parent: HTMLElement, title: string): HTMLElement {
 	const card = parent.createDiv({ cls: "qj-card" });
@@ -24,91 +47,193 @@ export function cardShell(parent: HTMLElement, title: string): HTMLElement {
 	return card;
 }
 
-/** 快速录入组件：每个标题区一枚按钮，点开捕获弹窗。 */
-export function renderQuickCapture(parent: HTMLElement, plugin: QuickJournalPlugin): void {
-	const card = cardShell(parent, t("快速录入"));
+/** 快速录入组件：所有日志类型的标题区各一枚按钮（周/月/年前缀区分）。 */
+export function renderQuickCapture(card: HTMLElement, ctx: SummaryCtx): void {
 	const row = card.createDiv({ cls: "qj-capture-row" });
-	for (const section of plugin.config.sections) {
-		const btn = row.createEl("button", { cls: "qj-btn", text: section.heading.replace(/^#+\s*/, "") });
-		btn.type = "button";
-		btn.onclick = () => plugin.openSectionCapture(section);
+	for (const type of ["daily", "weekly", "monthly", "annual"] as PeriodType[]) {
+		for (const section of ctx.plugin.config.journals[type].sections) {
+			const btn = row.createEl("button", {
+				cls: "qj-btn",
+				text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`,
+			});
+			btn.type = "button";
+			btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
+		}
 	}
 }
 
-/** 柱状图组件：期间内完成任务数（周/月按天、年按月）。 */
-export function renderBarChart(parent: HTMLElement, data: { label: string; value: number }[]): void {
-	const card = cardShell(parent, t("任务完成统计"));
+/** 任务图组件：指标行（完成/新建/记录）+ 柱状图（周/月按天、年按月）合并为一张卡。 */
+export function renderTaskChart(
+	card: HTMLElement,
+	ctx: SummaryCtx,
+	metrics: { label: string; value: string }[],
+	done: Map<string, number>,
+): void {
+	const grid = card.createDiv({ cls: "qj-metric-grid" });
+	for (const m of metrics) {
+		const cell = grid.createDiv({ cls: "qj-metric" });
+		cell.createSpan({ cls: "qj-metric-value", text: m.value });
+		cell.createSpan({ cls: "qj-metric-label", text: m.label });
+	}
+
+	const data =
+		ctx.kind === "year"
+			? Array.from({ length: 12 }, (_, m) => {
+					let sum = 0;
+					for (const [day, n] of done) {
+						if (Number(day.slice(5, 7)) - 1 === m) sum += n;
+					}
+					return { label: String(m + 1).padStart(2, "0"), value: sum };
+				})
+			: ctx.days.map((d) => ({ label: d.slice(8), value: done.get(d) ?? 0 }));
+
 	const max = Math.max(1, ...data.map((d) => d.value));
 	const chart = card.createDiv({ cls: "qj-bars" });
-	data.forEach((d, i) => {
+	for (const d of data) {
 		const col = chart.createDiv({ cls: "qj-bar-col" });
-		col.createDiv({
+		const plot = col.createDiv({ cls: "qj-bar-plot" });
+		if (d.value > 0) plot.createSpan({ cls: "qj-bar-count", text: String(d.value) });
+		plot.createDiv({
 			cls: "qj-bar-v",
-			attr: { style: `height:${Math.round((d.value / max) * 100)}%` },
-			text: d.value > 0 ? String(d.value) : "",
+			attr: { style: `height:${Math.max(3, Math.round((d.value / max) * 100))}%` },
 		});
-		if (i === 0 || i === data.length - 1 || data.length <= 16 || i % 3 === 0) {
-			col.createSpan({ cls: "qj-bar-l", text: d.label });
-		} else {
-			col.createSpan({ cls: "qj-bar-l", text: " " });
-		}
-	});
+		col.createSpan({ cls: "qj-bar-l", text: d.label });
+	}
 }
 
-/** 热力图组件（任务完成 / 内容记录共用）：days 为升序连续日期，counts 提供每日量。 */
+/**
+ * 热力图组件（任务完成 / 内容记录共用），**随期间类型自适应**：
+ * 周 = 7 个大格（星期 + 数量）；月 = 7 列日历格（日号 + 数量）；年 = 小格全年、整行展开。
+ * 画进给定的卡片容器（标题由视图的注册表负责）。
+ */
 export function renderHeatmap(
-	parent: HTMLElement,
-	title: string,
-	days: string[],
+	card: HTMLElement,
+	ctx: SummaryCtx,
 	counts: Map<string, number>,
+	wide: boolean,
 ): void {
-	const card = cardShell(parent, title);
-	const grid = card.createDiv({ cls: "qj-heatmap" });
+	if (wide) card.addClass("qj-card--wide");
 	const max = Math.max(1, ...counts.values());
-	for (const day of days) {
+	const weekdays = ["一", "二", "三", "四", "五", "六", "日"].map((w) => t(w));
+
+	if (ctx.kind === "week") {
+		const row = card.createDiv({ cls: "qj-hm-week" });
+		ctx.days.forEach((day, i) => {
+			const n = counts.get(day) ?? 0;
+			const box = row.createDiv({
+				cls: `qj-hm-big qj-hm-l${level(n, max)}`,
+				attr: { title: `${day} · ${n}` },
+			});
+			box.createSpan({ cls: "qj-hm-big-label", text: weekdays[i] });
+			box.createSpan({ cls: "qj-hm-big-count", text: String(n) });
+		});
+		return;
+	}
+
+	if (ctx.kind === "month") {
+		const grid = card.createDiv({ cls: "qj-hm-grid" });
+		for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
+		const first = new Date(`${ctx.days[0]}T00:00:00`);
+		const weeks = monthGrid(first.getFullYear(), first.getMonth());
+		for (const week of weeks) {
+			for (const cell of week) {
+				const n = cell.inMonth ? (counts.get(cell.key) ?? 0) : -1;
+				const box = grid.createDiv({
+					cls: `qj-hm-cell-m${n < 0 ? " qj-cal-out" : ` qj-hm-l${level(n, max)}`}`,
+					attr: { title: `${cell.key} · ${Math.max(0, n)}` },
+				});
+				box.createSpan({ cls: "qj-hm-cell-day", text: String(cell.date.getDate()) });
+				if (n > 0) box.createSpan({ cls: "qj-hm-cell-count", text: String(n) });
+			}
+		}
+		return;
+	}
+
+	// 年（或回退）：经典小格，7 行列流，横向铺满
+	const grid = card.createDiv({ cls: "qj-heatmap" });
+	for (const day of ctx.days) {
 		const n = counts.get(day) ?? 0;
-		const level = n === 0 ? 0 : Math.min(4, 1 + Math.ceil((n / max) * 4) - 1);
 		grid.createDiv({
-			cls: `qj-hm-cell qj-hm-l${level}`,
+			cls: `qj-hm-cell qj-hm-l${level(n, max)}`,
 			attr: { title: `${day} · ${n}` },
 		});
 	}
 }
 
-/** 数据趋势组件：每个数值字段一条 SVG 折线（缺日跳过连接）。 */
-export function renderTrend(
-	parent: HTMLElement,
-	fields: { label: string; unit?: string; values: Map<string, number>; days: string[] }[],
-): void {
-	const card = cardShell(parent, t("数据趋势"));
-	for (const f of fields) {
-		const row = card.createDiv({ cls: "qj-trend-row" });
-		row.createSpan({ cls: "qj-checkin-label", text: f.label });
-		const points: { x: number; y: number }[] = [];
-		const values = f.days.map((d) => f.values.get(d)).filter((v): v is number => v !== undefined);
-		if (values.length < 2) {
-			row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "—" });
-			continue;
+function level(n: number, max: number): number {
+	if (n === 0) return 0;
+	return Math.min(4, Math.max(1, Math.ceil((n / max) * 4)));
+}
+
+/** 数据趋势组件：单选字段一条折线（不同字段单位/量纲不同，不混画）。 */
+export function renderTrend(card: HTMLElement, ctx: SummaryCtx): void {
+	const config = ctx.plugin.config;
+	const fields: { id: string; label: string; unit?: string; values: Map<string, number> }[] = [];
+	for (const section of config.journals.daily.sections) {
+		if (section.type !== "data") continue;
+		for (const f of section.fields) {
+			const values = new Map<string, number>();
+			for (const day of ctx.days) {
+				const raw = ctx.records.get(day)?.fieldValues[f.key];
+				if (raw === undefined || raw === "") continue;
+				const n = Number(raw);
+				if (Number.isFinite(n)) values.set(day, n);
+			}
+			if (values.size > 0) fields.push({ id: `${section.id}::${f.key}`, label: f.label, unit: f.unit, values });
 		}
-		const min = Math.min(...values);
-		const max = Math.max(...values);
-		const span = max - min || 1;
-		const W = 100;
-		const H = 30;
-		f.days.forEach((day, i) => {
-			const v = f.values.get(day);
-			if (v === undefined) return;
-			points.push({ x: (i / (f.days.length - 1)) * W, y: H - ((v - min) / span) * H });
-		});
-		const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-		const svg = row.createSvg("svg", {
-			attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
-			cls: "qj-trend-svg",
-		});
-		svg.appendChild(createSvgEl(row, "polyline", { points: line }));
-		const unit = f.unit ? ` ${f.unit}` : "";
-		row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
 	}
+	if (fields.length === 0) {
+		card.createDiv({ cls: "qj-muted", text: "—" });
+		return;
+	}
+
+	const selected = fields.find((f) => f.id === config.trendSelection) ?? fields[0];
+	const select = card.createEl("select", { cls: "qj-input qj-trend-select" });
+	for (const f of fields) {
+		const opt = select.createEl("option", { text: f.label, attr: { value: f.id } });
+		if (f.id === selected.id) opt.selected = true;
+	}
+	select.onchange = async () => {
+		config.trendSelection = select.value;
+		await ctx.plugin.saveConfig();
+	};
+
+	renderSparkline(card, selected, ctx.days);
+}
+
+function renderSparkline(
+	card: HTMLElement,
+	f: { label: string; unit?: string; values: Map<string, number> },
+	days: string[],
+): void {
+	const row = card.createDiv({ cls: "qj-trend-row" });
+	const values = days.map((d) => f.values.get(d)).filter((v): v is number => v !== undefined);
+	if (values.length < 2) {
+		row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "—" });
+		return;
+	}
+	const min = Math.min(...values);
+	const max = Math.max(...values);
+	const span = max - min || 1;
+	const W = 100;
+	const H = 46;
+	const points = days
+		.map((day, i) => {
+			const v = f.values.get(day);
+			if (v === undefined) return null;
+			return { x: (i / (days.length - 1)) * W, y: H - ((v - min) / span) * H };
+		})
+		.filter((p): p is { x: number; y: number } => p !== null);
+	const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+	const svg = row.createSvg("svg", {
+		attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
+		cls: "qj-trend-svg",
+	});
+	svg.appendChild(
+		createSvgEl(row, "polyline", { points: line }),
+	);
+	const unit = f.unit ? ` ${f.unit}` : "";
+	row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
 }
 
 function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, string>): SVGElement {
@@ -118,23 +243,46 @@ function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, strin
 	return el;
 }
 
-/** 月历组件：格子带日号、完成数徽标、有日记圆点；点击打开当日日志。 */
-export function renderCalendar(
-	parent: HTMLElement,
-	app: App,
-	dailyDir: string,
-	year: number,
-	month0: number,
-	done: Map<string, number>,
-	hasNote: Set<string>,
-): void {
-	const card = cardShell(parent, `${year}-${String(month0 + 1).padStart(2, "0")} ${t("月历")}`);
+/** 月历组件：年/月片可点开对应复盘笔记；周号列点开周日志；格子点开当日日志。 */
+export function renderCalendar(card: HTMLElement, app: App, ctx: SummaryCtx): void {
+	const config = ctx.plugin.config;
+	const first = new Date(`${ctx.days[0]}T00:00:00`);
+	const year = first.getFullYear();
+	const month0 = first.getMonth();
+	const key = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+
+	const title = card.createDiv({ cls: "qj-cal-title" });
+	const yearChip = title.createEl("button", { cls: "qj-cal-chip", text: String(year) });
+	yearChip.type = "button";
+	yearChip.onclick = () => void ctx.plugin.openPeriodNote("annual", String(year));
+	const monthChip = title.createEl("button", { cls: "qj-cal-chip", text: key });
+	monthChip.type = "button";
+	monthChip.onclick = () => void ctx.plugin.openPeriodNote("monthly", key);
+
 	const weekdays = ["一", "二", "三", "四", "五", "六", "日"].map((w) => t(w));
 	const grid = card.createDiv({ cls: "qj-cal" });
+	grid.createDiv({ cls: "qj-cal-head", text: "W" });
 	for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
+
+	const done = new Map<string, number>();
+	for (const [day, rec] of ctx.records) {
+		let n = 0;
+		for (const line of rec.taskLines) {
+			if (/^\s*[-*]\s+\[[xX]\]/.test(line)) n++;
+		}
+		if (n > 0) done.set(day, n);
+	}
 	const today = dateKey(new Date());
-	const index = new VaultIndex(app, dailyDir);
+	const index = new VaultIndex(app, config.journals.daily.dir);
 	for (const week of monthGrid(year, month0)) {
+		const monday = week[0].date;
+		const weekCell = grid.createDiv({ cls: "qj-cal-weekno" });
+		const wmatch = /^(\d{4})-W(\d{2})$/.exec(weekKeyOf(monday));
+		weekCell.setText(wmatch ? wmatch[2] : "");
+		weekCell.onclick = () => {
+			const k = weekKeyOf(monday);
+			if (k) void ctx.plugin.openPeriodNote("weekly", k);
+		};
 		for (const cell of week) {
 			const el = grid.createDiv({ cls: `qj-cal-cell${cell.inMonth ? "" : " qj-cal-out"}` });
 			if (!cell.inMonth) continue;
@@ -142,7 +290,7 @@ export function renderCalendar(
 			el.createSpan({ cls: "qj-cal-day", text: String(cell.date.getDate()) });
 			const n = done.get(cell.key) ?? 0;
 			if (n > 0) el.createSpan({ cls: "qj-cal-badge", text: String(n) });
-			if (hasNote.has(cell.key)) el.createSpan({ cls: "qj-cal-dot" });
+			if (ctx.records.has(cell.key)) el.createSpan({ cls: "qj-cal-dot" });
 			el.onclick = () => {
 				const file = index.dailyFile(cell.key);
 				if (file) void app.workspace.getLeaf(false).openFile(file);
@@ -151,19 +299,24 @@ export function renderCalendar(
 	}
 }
 
+function weekKeyOf(d: Date): string {
+	const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+	const dayNum = date.getUTCDay() || 7;
+	date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+	const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+	const week = Math.ceil(((date.getTime() - yearStart) / 86400000 + 1) / 7);
+	return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
 /** 打卡汇总组件（沿用比例条形态）。 */
-export function renderCheckin(
-	parent: HTMLElement,
-	sections: JournalSection[],
-	days: string[],
-	records: Map<string, DayRecord>,
-): void {
-	for (const section of sections) {
+export function renderCheckin(card: HTMLElement, ctx: SummaryCtx): void {
+	for (const section of ctx.plugin.config.journals.daily.sections) {
 		if (section.type !== "checkin") continue;
-		const stats = boolStats(section.fields, days, records);
-		const card = cardShell(parent, section.heading.replace(/^#+\s*/, ""));
+		const stats = boolStats(section.fields, ctx.days, ctx.records);
+		const block = card.createDiv();
+		block.createDiv({ cls: "qj-checkin-heading", text: section.heading.replace(/^#+\s*/, "") });
 		for (const s of stats) {
-			const row = card.createDiv({ cls: "qj-checkin-row" });
+			const row = block.createDiv({ cls: "qj-checkin-row" });
 			row.createSpan({ cls: "qj-checkin-label", text: s.label });
 			const bar = row.createDiv({ cls: "qj-bar" });
 			const recorded = s.yes + s.no;
@@ -183,14 +336,13 @@ export function renderCheckin(
 }
 
 /** 最近速记组件：期内最新若干条，按钮跳速记面板。 */
-export function renderFeedMini(parent: HTMLElement, plugin: QuickJournalPlugin, entries: SectionEntry[]): void {
-	const card = cardShell(parent, t("最近速记"));
-	const latest = [...entries].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+export function renderFeedMini(card: HTMLElement, ctx: SummaryCtx): void {
+	const latest = [...ctx.entries].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
 	if (latest.length === 0) {
 		card.createDiv({ cls: "qj-muted", text: t("暂无内容，先去记一条") });
 	} else {
 		const names = new Map(
-			plugin.config.sections
+			ctx.plugin.config.journals.daily.sections
 				.filter((s) => s.panel === true)
 				.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]),
 		);
@@ -208,33 +360,44 @@ export function renderFeedMini(parent: HTMLElement, plugin: QuickJournalPlugin, 
 	}
 	const more = card.createEl("button", { cls: "qj-btn", text: t("打开速记面板") });
 	more.type = "button";
-	more.onclick = () => void plugin.openView("qj-panel");
+	more.onclick = () => void ctx.plugin.openView("qj-panel", ctx.plugin.config.viewLocations.panel);
 }
 
-/** 查询块组件：期内日志的 dataview / dataviewjs / tasks 块，委托原插件渲染。 */
+/** 查询块组件：手工配置（编辑模式录入）+ 期内日志自动识别，合并去重后委托渲染。 */
 export async function renderQueryPanel(
-	parent: HTMLElement,
+	card: HTMLElement,
 	app: App,
-	blocks: QueryBlock[],
-	component: Component,
+	ctx: SummaryCtx,
+	detected: QueryBlock[],
 ): Promise<void> {
-	const card = cardShell(parent, t("日志内查询块"));
-	if (blocks.length === 0) {
+	const config = ctx.plugin.config;
+	if (ctx.editing) {
+		renderQueryEditor(card, ctx);
+		return;
+	}
+
+	const custom: QueryBlock[] = config.summaryQueries.map((q) => ({
+		kind: q.kind,
+		code: q.code,
+		source: "",
+	}));
+	const all = [...custom, ...detected];
+	if (all.length === 0) {
 		card.createDiv({ cls: "qj-muted", text: t("暂无查询块") });
 		return;
 	}
 	const bridge = new QueryBridge(app);
-	for (const block of blocks) {
+	for (const block of all) {
 		const wrap = card.createDiv({ cls: "qj-query-block" });
 		wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
 		let ok = false;
 		if (block.kind === "dataview") {
-			ok = await bridge.renderDvQuery(block.code, block.source, body, component);
+			ok = await bridge.renderDvQuery(block.code, block.source, body, ctx.component);
 		} else if (block.kind === "dataviewjs") {
-			ok = bridge.renderDvJs(block.code, body, component, block.source);
+			ok = bridge.renderDvJs(block.code, body, ctx.component, block.source);
 		} else {
-			ok = await bridge.renderTasksQuery(block.code, block.source, body, component);
+			ok = await bridge.renderTasksQuery(block.code, block.source, body, ctx.component);
 		}
 		if (!ok) {
 			body.empty();
@@ -249,4 +412,40 @@ export async function renderQueryPanel(
 			});
 		}
 	}
+}
+
+/** 编辑模式下的查询配置：列表删除 + 新增（类型 + 语句）。 */
+function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
+	const config = ctx.plugin.config;
+	const rerender = ctx.rerender;
+	for (const q of [...config.summaryQueries]) {
+		const row = card.createDiv({ cls: "qj-query-edit-row" });
+		row.createSpan({ cls: "qj-query-chip", text: q.kind });
+		row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
+		const del = row.createEl("button", { cls: "qj-feed-btn" });
+		del.type = "button";
+		del.setAttribute("aria-label", t("删除"));
+		del.setText("✕");
+		del.onclick = async () => {
+			config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
+			await ctx.plugin.saveConfig();
+			rerender();
+		};
+	}
+	const add = card.createDiv({ cls: "qj-query-add" });
+	const kindSel = add.createEl("select", { cls: "qj-input" });
+	for (const k of ["dataview", "dataviewjs", "tasks"] as QueryKind[]) {
+		kindSel.createEl("option", { text: k, attr: { value: k } });
+	}
+	const code = add.createEl("textarea", { cls: "qj-input qj-textarea" });
+	code.rows = 3;
+	code.placeholder = t("查询语句");
+	const btn = add.createEl("button", { cls: "qj-btn", text: t("添加查询") });
+	btn.type = "button";
+	btn.onclick = async () => {
+		if (code.value.trim() === "") return;
+		config.summaryQueries.push({ kind: kindSel.value as QueryKind, code: code.value.trim() });
+		await ctx.plugin.saveConfig();
+		rerender();
+	};
 }

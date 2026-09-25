@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { boolStats, numberStats, taskStats } from "../src/metrics/aggregate";
 import type { DayRecord } from "../src/metrics/day-record";
-import { DEFAULT_SECTIONS, BOOL_YES, BOOL_NO } from "../src/types";
-import { dailySkeleton } from "../src/capture/skeleton";
+import { DEFAULT_JOURNALS, BOOL_YES, BOOL_NO, mergeConfig } from "../src/types";
+import { skeletonFor, noteKeyFor } from "../src/capture/skeleton";
 import { parseFieldLines } from "../src/parse/field-lines";
 
 function rec(date: string, fieldValues: Record<string, string>, taskLines: string[] = []): DayRecord {
 	return { date, fieldValues, taskLines };
 }
 
-const CHECKIN = DEFAULT_SECTIONS.find((s) => s.id === "checkin")!;
-const DATA = DEFAULT_SECTIONS.find((s) => s.id === "data")!;
+const SECTIONS = DEFAULT_JOURNALS.daily.sections;
+const CHECKIN = SECTIONS.find((s) => s.id === "checkin")!;
+const DATA = SECTIONS.find((s) => s.id === "data")!;
 const DAYS = ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27"];
 
 describe("指标聚合", () => {
@@ -61,11 +62,11 @@ describe("指标聚合", () => {
 	});
 });
 
-describe("骨架生成（round-trip）", () => {
-	it("骨架包含全部标题区与字段空值行，解析后键一致", () => {
-		const text = dailySkeleton(new Date(2026, 8, 25), DEFAULT_SECTIONS);
+describe("骨架生成（round-trip）与类型键", () => {
+	it("日骨架包含全部标题区与字段空值行，解析后键一致", () => {
+		const text = skeletonFor("daily", new Date(2026, 8, 25), SECTIONS);
 		const parsedKeys = parseFieldLines(text.split("\n")).map((p) => p.key);
-		for (const section of DEFAULT_SECTIONS) {
+		for (const section of SECTIONS) {
 			expect(text).toContain(section.heading);
 			for (const field of section.fields) {
 				expect(parsedKeys).toContain(field.key);
@@ -73,5 +74,36 @@ describe("骨架生成（round-trip）", () => {
 		}
 		expect(text).toContain("- [💊medicine::]");
 		expect(text).toContain("journal-date: 2026-09-25");
+	});
+
+	it("周/月/年骨架与目标键", () => {
+		const now = new Date(2026, 8, 25); // 2026-W39 周五
+		expect(noteKeyFor("daily", now)).toBe("2026-09-25");
+		expect(noteKeyFor("weekly", now)).toBe("2026-W39");
+		expect(noteKeyFor("monthly", now)).toBe("2026-09");
+		expect(noteKeyFor("annual", now)).toBe("2026");
+
+		const weekly = skeletonFor("weekly", now, DEFAULT_JOURNALS.weekly.sections);
+		expect(weekly).toContain("# 2026-W39 周日志");
+		expect(weekly).toContain("journal-date: 2026-09-21"); // 周一
+		expect(weekly).toContain("- [本周成就/亮点::]");
+
+		const monthly = skeletonFor("monthly", now, DEFAULT_JOURNALS.monthly.sections);
+		expect(monthly).toContain("# 2026-09 月度日志");
+		expect(monthly).toContain("type: monthly_review");
+	});
+
+	it("v0.5 扁平配置迁移到按类型组织", () => {
+		const migrated = mergeConfig({
+			dailyDir: "999 Custom",
+			sections: [
+				{ id: "x", heading: "## X", type: "list", fields: [] },
+			],
+			language: "en",
+		});
+		expect(migrated.journals.daily.dir).toBe("999 Custom");
+		expect(migrated.journals.daily.sections[0].id).toBe("x");
+		expect(migrated.journals.weekly.dir).toBe(DEFAULT_JOURNALS.weekly.dir);
+		expect(migrated.language).toBe("en");
 	});
 });

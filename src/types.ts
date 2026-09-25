@@ -1,14 +1,15 @@
 /**
  * 领域模型 + 默认值 + config 合并/迁移（纯函数，零 DOM、不 import obsidian）。
  *
- * v0.2 起配置单元是「标题区」（JournalSection）：日志里的一个标题对应一块录入配置。
- * - 有内联字段的标题区按类型填值（打卡 / 数据 / 文本）；
- * - 没有内联字段的标题区是列表，逐项追加内容；
- * - 标题区可从模板笔记自动识别（src/parse/detect-sections.ts）。
- * 范围仅日日志；周/月/年复盘另行开发，不在本模型内。
+ * v0.6 起配置按「日志类型」组织（daily / weekly / monthly / annual），每个类型一个
+ * 目录 + 自己的快速录入标题区（周/月/年复盘即各自类型下的 text 标题区，命令调用、
+ * 无独立图标）。速记面板仍只聚合 daily。
+ * 汇总视图有组件布局（顺序可编辑）与手工查询块；两个视图可配置默认打开位置。
  */
 
 export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph";
+export type PeriodType = "daily" | "weekly" | "monthly" | "annual";
+export type QueryKind = "dataview" | "dataviewjs" | "tasks";
 
 export interface SectionField {
 	/** 字段行键，可含 emoji（前缀如 💊medicine、后缀如 weight⚖️） */
@@ -25,28 +26,47 @@ export interface JournalSection {
 	/** 日志里的标题行原文（含 # 前缀与 emoji），定位锚点 */
 	heading: string;
 	type: SectionType;
-	/** 有内联字段的类型用；list 恒为空 */
+	/** 有内联字段的类型用；list 恒为空；paragraph 恒为空 */
 	fields: SectionField[];
 	/** list 类型用：追加行模板，默认 `- {{value}}`（GTD 等任务区可设 `- [ ] {{value}}`） */
 	lineTemplate?: string;
-	/** 文本/列表/段落类型可开：在速记面板里聚合该标题区的内容 */
+	/** 文本/列表/段落类型可开：在速记面板里聚合该标题区的内容（仅 daily） */
 	panel?: boolean;
-	/** 面板开启后可用：写入时自动加 HH:mm 时间戳前缀，面板解析显示记录时间 */
+	/** 面板开启后可用：写入时自动加 HH:mm 时间戳前缀，面板解析显示记录时间（仅 daily） */
 	timestamp?: boolean;
 }
 
+export interface JournalConfig {
+	/** 该类型日志的目录 */
+	dir: string;
+	sections: JournalSection[];
+}
+
+export interface CustomQuery {
+	kind: QueryKind;
+	code: string;
+}
+
+export type ViewLocation = "tab" | "sidebar";
+
 export interface QJConfig {
 	language: "auto" | "zh" | "en";
-	dailyDir: string;
-	/** 「从模板识别」读取的笔记路径（模板或任一日志） */
+	/** 「从模板识别」读取的笔记路径（作用于 daily 的标题区） */
 	templateNote: string;
-	sections: JournalSection[];
+	journals: Record<PeriodType, JournalConfig>;
+	/** 汇总视图的组件顺序（编辑模式拖拽调整；缺省补齐、未知项剔除） */
+	summaryLayout: string[];
+	/** 手工查询块（编辑模式下录入，与日志内自动识别的合并渲染） */
+	summaryQueries: CustomQuery[];
+	/** 趋势组件选中的字段（sectionId::key） */
+	trendSelection?: string;
+	viewLocations: { summary: ViewLocation; panel: ViewLocation };
 }
 
 export const BOOL_YES = "✔️";
 export const BOOL_NO = "❌";
 
-export const DEFAULT_SECTIONS: JournalSection[] = [
+export const DEFAULT_DAILY_SECTIONS: JournalSection[] = [
 	{
 		id: "checkin",
 		heading: "### 每日打卡",
@@ -99,11 +119,65 @@ export const DEFAULT_SECTIONS: JournalSection[] = [
 	},
 ];
 
+export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
+	daily: { dir: "500 Journal/540 Daily", sections: DEFAULT_DAILY_SECTIONS },
+	weekly: {
+		dir: "500 Journal/530 Weekly",
+		sections: [
+			{
+				id: "weekly-review",
+				heading: "## 🤔 周末回顾与总结",
+				type: "text",
+				fields: [
+					{ key: "本周成就/亮点", label: "成就亮点" },
+					{ key: "本周关键项目/计划进展", label: "项目进展" },
+					{ key: "本周遇到的挑战/问题", label: "挑战问题" },
+					{ key: "下周需要调整的地方", label: "需要调整" },
+					{ key: "下周展望", label: "下周展望" },
+				],
+			},
+		],
+	},
+	monthly: {
+		dir: "500 Journal/520 Monthly",
+		sections: [
+			{
+				id: "monthly-review",
+				heading: "## 🤔 月度回顾与总结",
+				type: "text",
+				fields: [
+					{ key: "本月最大的成就/亮点", label: "成就亮点" },
+					{ key: "本月关键项目进展", label: "项目进展" },
+					{ key: "本月遇到的挑战/问题", label: "挑战问题" },
+					{ key: "下月需要调整的地方", label: "需要调整" },
+					{ key: "下月展望", label: "下月展望" },
+				],
+			},
+		],
+	},
+	annual: { dir: "500 Journal/510 Annual", sections: [] },
+};
+
+/** 汇总视图的组件 id（顺序即默认布局）。 */
+export const DEFAULT_SUMMARY_LAYOUT = [
+	"quick-capture",
+	"task-chart",
+	"checkin",
+	"trend",
+	"calendar",
+	"task-heatmap",
+	"entry-heatmap",
+	"feed",
+	"queries",
+] as const;
+
 export const DEFAULT_CONFIG: QJConfig = {
 	language: "auto",
-	dailyDir: "500 Journal/540 Daily",
 	templateNote: "",
-	sections: DEFAULT_SECTIONS,
+	journals: DEFAULT_JOURNALS,
+	summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
+	summaryQueries: [],
+	viewLocations: { summary: "tab", panel: "tab" },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -111,6 +185,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph"];
+const PERIOD_TYPES: PeriodType[] = ["daily", "weekly", "monthly", "annual"];
+const QUERY_KINDS: QueryKind[] = ["dataview", "dataviewjs", "tasks"];
 
 function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | null {
 	if (!isRecord(raw)) return null;
@@ -127,57 +203,96 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 					...(typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}),
 				}))
 		: [];
-	const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : undefined;
-	const panel = raw.panel === true ? true : undefined;
-	const timestamp = raw.timestamp === true ? true : undefined;
 	return {
 		id,
 		heading,
 		type,
 		fields,
-		...(lineTemplate ? { lineTemplate } : {}),
-		...(panel ? { panel } : {}),
-		...(timestamp ? { timestamp } : {}),
+		...(typeof raw.lineTemplate === "string" ? { lineTemplate: raw.lineTemplate } : {}),
+		...(raw.panel === true ? { panel: true } : {}),
+		...(raw.timestamp === true ? { timestamp: true } : {}),
 	};
 }
 
-/** 深合并用户保存的 config 到默认值上（逐级兜底；v0.1 的 registry/actions 自动迁移）。 */
+function sanitizeJournal(raw: unknown, fallback: JournalConfig): JournalConfig {
+	if (!isRecord(raw)) return fallback;
+	const dir = typeof raw.dir === "string" && raw.dir.trim() !== "" ? raw.dir : fallback.dir;
+	let sections: JournalSection[];
+	if (Array.isArray(raw.sections)) {
+		sections = raw.sections
+			.map((s, i) => sanitizeSection(s, i))
+			.filter((s): s is JournalSection => s !== null);
+		if (sections.length === 0) sections = fallback.sections;
+	} else {
+		sections = fallback.sections;
+	}
+	return { dir, sections };
+}
+
+function sanitizeQueries(raw: unknown): CustomQuery[] {
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.filter((q): q is Record<string, unknown> => isRecord(q) && typeof q.code === "string")
+		.filter((q) => QUERY_KINDS.includes(q.kind as QueryKind))
+		.map((q) => ({ kind: q.kind as QueryKind, code: String(q.code) }))
+		.filter((q) => q.code.trim() !== "");
+}
+
+function sanitizeLayout(raw: unknown): string[] {
+	if (!Array.isArray(raw)) return [...DEFAULT_SUMMARY_LAYOUT];
+	const known = new Set<string>(DEFAULT_SUMMARY_LAYOUT);
+	const kept = raw.filter((id): id is string => typeof id === "string" && known.has(id));
+	const out = [...new Set(kept)];
+	for (const id of DEFAULT_SUMMARY_LAYOUT) {
+		if (!out.includes(id)) out.push(id);
+	}
+	return out;
+}
+
+/** 深合并用户保存的 config（v0.5 的扁平结构自动迁移到按类型组织）。 */
 export function mergeConfig(saved: unknown): QJConfig {
 	const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as QJConfig;
 	if (!isRecord(saved)) return base;
 	if (saved.language === "zh" || saved.language === "en" || saved.language === "auto") {
 		base.language = saved.language;
 	}
-	if (typeof saved.dailyDir === "string" && saved.dailyDir.trim() !== "") {
-		base.dailyDir = saved.dailyDir;
-	}
 	if (typeof saved.templateNote === "string") {
 		base.templateNote = saved.templateNote;
 	}
-	if (Array.isArray(saved.sections)) {
-		const sections = saved.sections
-			.map((s, i) => sanitizeSection(s, i))
-			.filter((s): s is JournalSection => s !== null);
-		if (sections.length > 0) base.sections = sections;
-		return base;
+	if (isRecord(saved.journals)) {
+		for (const type of PERIOD_TYPES) {
+			base.journals[type] = sanitizeJournal(saved.journals[type], base.journals[type]);
+		}
+	} else if (typeof saved.dailyDir === "string" || Array.isArray(saved.sections)) {
+		// v0.5 迁移：dailyDir + sections → journals.daily
+		base.journals.daily = sanitizeJournal(
+			{ dir: saved.dailyDir, sections: saved.sections },
+			base.journals.daily,
+		);
 	}
-	// v0.1 迁移：registry.daily（bool/number/text）→ 标题区；周/月与 actions 丢弃（复盘另做）
-	if (isRecord(saved.registry) && Array.isArray(saved.registry.daily)) {
-		const kindMap: Record<string, SectionType> = { bool: "checkin", number: "data", text: "text" };
-		const migrated: JournalSection[] = (saved.registry.daily as unknown[])
-			.map((s, i) => {
-				if (!isRecord(s)) return null;
-				const type = kindMap[String(s.kind)] ?? "text";
-				return sanitizeSection({ ...s, type }, i);
-			})
-			.filter((s): s is JournalSection => s !== null);
-		if (migrated.length > 0) {
-			const ids = new Set(migrated.map((s) => s.id));
-			for (const extra of DEFAULT_SECTIONS) {
-				if (extra.type === "list" && !ids.has(extra.id)) migrated.push(extra);
-			}
-			base.sections = migrated;
+	base.summaryLayout = sanitizeLayout(saved.summaryLayout);
+	base.summaryQueries = sanitizeQueries(saved.summaryQueries);
+	if (typeof saved.trendSelection === "string") base.trendSelection = saved.trendSelection;
+	if (isRecord(saved.viewLocations)) {
+		const vl = saved.viewLocations;
+		if (vl.summary === "tab" || vl.summary === "sidebar") {
+			base.viewLocations.summary = vl.summary;
+		}
+		if (vl.panel === "tab" || vl.panel === "sidebar") {
+			base.viewLocations.panel = vl.panel;
 		}
 	}
 	return base;
+}
+
+/** 跨类型找标题区（命令与汇总入口用）。 */
+export function findSectionById(
+	config: QJConfig,
+	sectionId: string,
+): { type: PeriodType; section: JournalSection } | null {
+	for (const type of PERIOD_TYPES) {
+		const section = config.journals[type].sections.find((s) => s.id === sectionId);
+		if (section) return { type, section };
+	}
+	return null;
 }
