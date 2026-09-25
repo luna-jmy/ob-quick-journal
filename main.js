@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T15:08:44.246Z */
+/* Quick Journal — bundled 2026-09-25T15:20:41.269Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -280,6 +280,9 @@ var EN = {
   "\u5185\u5BB9\u8BB0\u5F55\u70ED\u529B\u56FE": "Entry heatmap",
   "\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1": "Tasks completed",
   "\u6570\u636E\u8D8B\u52BF": "Data trends",
+  "\u6700\u65B0": "Last",
+  "\u6700\u5927": "Max",
+  "\u6700\u5C0F": "Min",
   "\u6708\u5386": "Calendar",
   "\u6700\u8FD1\u901F\u8BB0": "Recent captures",
   "\u65E5\u5FD7\u5185\u67E5\u8BE2\u5757": "Queries in journals",
@@ -1530,8 +1533,9 @@ var QueryBridge = class {
       let markdown = "";
       if (typeof result === "string") {
         markdown = result;
-      } else if (Array.isArray(result == null ? void 0 : result.tasks)) {
-        markdown = result.tasks.map(
+      } else {
+        const tasks = Array.isArray(result) ? result : Array.isArray(result == null ? void 0 : result.tasks) ? result.tasks : [];
+        markdown = tasks.map(
           (task) => typeof task.toMarkdown === "function" ? task.toMarkdown() : typeof task.toString === "function" ? String(task) : ""
         ).filter((line) => line !== "").join("\n");
       }
@@ -1707,32 +1711,74 @@ function renderTrend(card, ctx) {
   renderSparkline(card, selected, ctx.days);
 }
 function renderSparkline(card, f, days) {
+  var _a;
   const row = card.createDiv({ cls: "qj-trend-row" });
   const values = days.map((d) => f.values.get(d)).filter((v) => v !== void 0);
-  if (values.length < 2) {
-    row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "\u2014" });
+  if (values.length === 0) {
+    row.createSpan({ cls: "qj-muted", text: "\u2014" });
     return;
   }
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = max - min || 1;
+  const span = max - min;
   const W = 100;
-  const H = 46;
+  const H = 60;
+  const PAD = 5;
+  const yOf = (v) => span === 0 ? H / 2 : PAD + (1 - (v - min) / span) * (H - 2 * PAD);
   const points = days.map((day, i) => {
     const v = f.values.get(day);
     if (v === void 0) return null;
-    return { x: i / (days.length - 1) * W, y: H - (v - min) / span * H };
+    const x = days.length === 1 ? W - 3 : 2 + i / (days.length - 1) * (W - 4);
+    return { x, y: yOf(v) };
   }).filter((p) => p !== null);
-  const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const svg = row.createSvg("svg", {
+  const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(1);
+  const yaxis = row.createDiv({ cls: "qj-trend-yaxis" });
+  yaxis.createSpan({ text: fmt(max) });
+  yaxis.createSpan({ text: fmt((max + min) / 2) });
+  yaxis.createSpan({ text: fmt(min) });
+  const plot = row.createDiv({ cls: "qj-trend-plot" });
+  const svg = plot.createSvg("svg", {
     attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
     cls: "qj-trend-svg"
   });
+  for (const y of [PAD, H / 2, H - PAD]) {
+    svg.appendChild(
+      createSvgEl(row, "line", {
+        x1: "2",
+        y1: y.toFixed(1),
+        x2: String(W - 2),
+        y2: y.toFixed(1),
+        "class": "qj-trend-grid"
+      })
+    );
+  }
+  svg.appendChild(createSvgEl(row, "line", { x1: "2", y1: "0", x2: "2", y2: String(H), "class": "qj-trend-axis" }));
   svg.appendChild(
-    createSvgEl(row, "polyline", { points: line })
+    createSvgEl(row, "line", { x1: "0", y1: String(H - 1), x2: String(W), y2: String(H - 1), "class": "qj-trend-axis" })
   );
+  if (points.length >= 2) {
+    const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    svg.appendChild(createSvgEl(row, "polyline", { points: line }));
+  }
+  for (const p of points) {
+    svg.appendChild(
+      createSvgEl(row, "circle", {
+        cx: p.x.toFixed(1),
+        cy: p.y.toFixed(1),
+        r: "2"
+      })
+    );
+  }
+  const xaxis = plot.createDiv({ cls: "qj-trend-xaxis" });
+  const mid = (_a = days[Math.floor((days.length - 1) / 2)]) != null ? _a : days[0];
+  xaxis.createSpan({ text: days[0].slice(5) });
+  xaxis.createSpan({ text: mid.slice(5) });
+  xaxis.createSpan({ text: days[days.length - 1].slice(5) });
   const unit = f.unit ? ` ${f.unit}` : "";
-  row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
+  const stats = row.createDiv({ cls: "qj-trend-stats" });
+  stats.createSpan({ text: `${t("\u6700\u65B0")} ${values[values.length - 1]}${unit}` });
+  stats.createSpan({ text: `${t("\u6700\u5927")} ${max}${unit}` });
+  stats.createSpan({ text: `${t("\u6700\u5C0F")} ${min}${unit}` });
 }
 function createSvgEl(host, tag, attrs) {
   const el = host.ownerDocument.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -2651,6 +2697,9 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     this.tab = "daily";
   }
   display() {
+    var _a;
+    const scroller = this.containerEl.closest(".vertical-tab-content");
+    const scrollTop = (_a = scroller == null ? void 0 : scroller.scrollTop) != null ? _a : 0;
     this.containerEl.empty();
     new import_obsidian10.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
@@ -2662,8 +2711,8 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         setLanguage(
           this.plugin.config.language,
           () => {
-            var _a;
-            return (_a = this.app) == null ? void 0 : _a.locale;
+            var _a2;
+            return (_a2 = this.app) == null ? void 0 : _a2.locale;
           }
         );
         await this.plugin.saveConfig();
@@ -2710,6 +2759,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         ).open();
       })
     );
+    if (scroller !== null && scrollTop > 0) scroller.scrollTop = scrollTop;
   }
   /** 日/周/月/年 tab 切换。 */
   renderJournalTabs() {

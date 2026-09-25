@@ -5,6 +5,17 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.6.2
+
+### 修复
+
+- **tasks 查询渲染**：Tasks API v3 的 `executeTasksQuery` 返回任务数组，桥此前只认
+  字符串 / `{tasks}` 形态导致误判失败；数组结果按 `toMarkdown()` 序列化渲染
+- **数据趋势图**：加 X 轴（首/中/尾日期）与 Y 轴（最大/中值/最小 + 网格虚线 + 轴线）；
+  数据点画圆点；全等值画居中平线（不再贴底一条死线）；右侧最新/最大/最小读数
+- **全年热力图正方形**：行轨道改 `max-content`，格子由 `aspect-ratio` 定高
+- **设置页跳顶**：结构性重绘前记住滚动位置、画完恢复，改任何一项不再跳回顶部
+
 ## 0.6.1
 
 ### 修复
