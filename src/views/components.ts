@@ -8,6 +8,7 @@ import type { App, Component } from "obsidian";
 import type QuickJournalPlugin from "../main";
 import type { JournalSection } from "../types";
 import type { SectionEntry } from "../parse/section-entries";
+import { taskSymbol } from "../parse/line-ops";
 import type { QueryBlock } from "../parse/query-blocks";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
@@ -199,7 +200,10 @@ export function renderFeedMini(parent: HTMLElement, plugin: QuickJournalPlugin, 
 				cls: "qj-feed-meta",
 				text: `${names.get(e.sectionId) ?? ""}${e.time ? ` · ${e.time}` : ""}`,
 			});
-			row.createSpan({ cls: "qj-mini-text", text: e.text.replace(/\n/g, " ") });
+			// 小卡没有切换按钮，这里按 taskStatus 补状态符号
+			const text =
+				e.taskStatus !== undefined ? `${taskSymbol(e.taskStatus)} ${e.text}` : e.text;
+			row.createSpan({ cls: "qj-mini-text", text: text.replace(/\n/g, " ") });
 		}
 	}
 	const more = card.createEl("button", { cls: "qj-btn", text: t("打开速记面板") });

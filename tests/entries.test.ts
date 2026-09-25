@@ -38,15 +38,16 @@ const SECTIONS: JournalSection[] = [
 ];
 
 describe("标题区内容条目抽取", () => {
-	it("列表区：逐条成流，任务带状态符号；空行/注释/字段行/代码块不进流", () => {
+	it("列表区：逐条成流，正文不带状态符号（符号只在面板按钮上）；空行/注释/字段行/代码块不进流", () => {
 		const entries = collectEntries("2026-09-25", NOTE.split("\n"), SECTIONS);
 		const gtd = entries.filter((e) => e.sectionId === "gtd");
 		expect(gtd.map((e) => e.text)).toEqual([
-			"☐ 任务一",
-			"☑ 任务二 ✅ 2026-09-25",
-			"✕ 任务三",
-			"◐ 任务四",
+			"任务一",
+			"任务二 ✅ 2026-09-25",
+			"任务三",
+			"任务四",
 		]);
+		expect(gtd.map((e) => e.taskStatus)).toEqual([" ", "x", "-", "/"]);
 		const ideas = entries.filter((e) => e.sectionId === "ideas");
 		expect(ideas.map((e) => e.text)).toEqual(["灵感A"]);
 	});
@@ -89,7 +90,7 @@ describe("时间戳与段落", () => {
 		const entries = collectEntries("2026-09-25", NOTE.split("\n"), SECTIONS);
 		const ideas = entries.filter((e) => e.sectionId === "ideas");
 		expect(ideas[0]).toMatchObject({ time: "08:44", text: "早上想到的" });
-		expect(ideas[1]).toMatchObject({ time: "09:30", text: "☐ 要做的任务" });
+		expect(ideas[1]).toMatchObject({ time: "09:30", text: "要做的任务" });
 		// 编辑写回需要：行号、原文、前缀（重建 `- ` / `- [ ] ` + 时间戳）、可编辑内容
 		expect(ideas[0]).toMatchObject({
 			lineIndex: 2,

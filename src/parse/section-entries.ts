@@ -124,7 +124,8 @@ export function collectEntries(
 					sectionId: section.id,
 					kind: "line",
 					...ts,
-					text: `${taskPrefix(task[1])} ${ts.text}`,
+					// 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
+					text: ts.text,
 					content: ts.text,
 					prefix: line.slice(0, line.length - task[2].length),
 					lineIndex: i,

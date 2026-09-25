@@ -443,17 +443,23 @@
 	padding: var(--size-2-1) var(--size-2-2);
 }
 
+/* 完成切换按钮：唯一的方框——正文不再渲染状态符号，hover 有明确反馈 */
 .qj-feed-toggle {
 	background: transparent;
-	border: none;
-	padding: 0;
-	font-size: var(--font-ui-medium);
+	border: 1px solid transparent;
+	border-radius: var(--radius-s);
+	padding: 0 var(--size-1-1, 2px);
+	margin-left: calc(-1 * (var(--size-1-1, 2px)));
+	font-size: 1.1em;
+	line-height: 1.4;
 	color: var(--text-muted);
 	cursor: pointer;
 }
 
 .qj-feed-toggle:hover {
 	color: var(--text-accent, var(--text-normal));
+	background: var(--background-modifier-hover);
+	border-color: var(--background-modifier-border);
 }
 
 /* ── 快速录入条（汇总视图顶部） ────────────────────────────────────────── */

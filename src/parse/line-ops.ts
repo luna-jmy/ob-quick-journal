@@ -42,3 +42,11 @@ export function taskStateOf(raw: string): { isTask: boolean; done: boolean } {
 	if (!m) return { isTask: false, done: false };
 	return { isTask: true, done: m[2] === "x" || m[2] === "X" };
 }
+
+/** 勾选框字符 → 展示符号（无交互按钮的渲染处用，如汇总的最近速记）。 */
+export function taskSymbol(status: string): string {
+	if (status === " ") return "☐";
+	if (status === "x" || status === "X") return "☑";
+	if (status === "-") return "✕";
+	return "◐";
+}
