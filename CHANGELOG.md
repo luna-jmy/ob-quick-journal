@@ -5,6 +5,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.6.3
+
+### 修复
+
+- **查询块渲染改走官方处理器管线**：不再探测 Dataview / Tasks 的具体 API 形状
+  （v3 返回值等猜测不可靠），改为把查询包回 ` ```dataview / dataviewjs / tasks ` 围栏
+  交给 `MarkdownRenderer`——由对应插件自己注册的代码块处理器渲染，只做「插件是否启用」
+  的探测用于降级说明
+- **趋势图选字段即时刷新**：下拉切换后重绘，不再需要手动刷新
+
 ## 0.6.2
 
 ### 修复

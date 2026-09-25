@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T15:20:41.269Z */
+/* Quick Journal — bundled 2026-09-25T15:31:12.793Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -1471,76 +1471,28 @@ var QueryBridge = class {
   constructor(app) {
     this.app = app;
   }
-  plugin(id) {
+  enabled(pluginId) {
     var _a;
-    const plugins = this.app["plugins"];
-    return (_a = plugins == null ? void 0 : plugins[id]) != null ? _a : null;
+    const plugins = this.app.plugins;
+    return ((_a = plugins == null ? void 0 : plugins.plugins) == null ? void 0 : _a[pluginId]) != null;
   }
   get dataviewAvailable() {
-    var _a;
-    return ((_a = this.plugin("dataview")) == null ? void 0 : _a.api) != null;
+    return this.enabled("dataview");
   }
   get tasksAvailable() {
-    return this.tasksApi() !== null;
+    return this.enabled("obsidian-tasks");
   }
-  /** Tasks 的 API 入口：插件实例 api 或全局 tasksApiV3（探测不到返回 null）。 */
-  tasksApi() {
-    var _a;
-    const viaPlugin = (_a = this.plugin("obsidian-tasks")) == null ? void 0 : _a.api;
-    if (viaPlugin && (typeof viaPlugin.executeTasksQuery === "function" || typeof viaPlugin.executeQuery === "function")) {
-      return viaPlugin;
-    }
-    const globalApi = globalThis.tasksApiV3;
-    if (globalApi && typeof globalApi.executeTasksQuery === "function") {
-      return globalApi;
-    }
-    return null;
-  }
-  /** ```dataview 块：tryQueryMarkdown 拿 markdown，再用官方 MarkdownRenderer 渲染。 */
-  async renderDvQuery(query, sourcePath, container, component) {
-    var _a;
+  /** 委托渲染：官方处理器管线（MarkdownRenderer → 各插件的代码块处理器）。 */
+  async renderQuery(kind, code, sourcePath, container, component) {
     try {
-      const api = (_a = this.plugin("dataview")) == null ? void 0 : _a.api;
-      if (typeof (api == null ? void 0 : api.tryQueryMarkdown) !== "function") return false;
-      const md = await api.tryQueryMarkdown(query, sourcePath);
-      await import_obsidian6.MarkdownRenderer.render(this.app, md, container, sourcePath, component);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  /** ```dataviewjs 块：官方 executeJs 入口（CW 同款口径），不自己 eval。 */
-  renderDvJs(code, container, component, sourcePath) {
-    var _a;
-    try {
-      const api = (_a = this.plugin("dataview")) == null ? void 0 : _a.api;
-      if (typeof (api == null ? void 0 : api.executeJs) !== "function") return false;
-      api.executeJs(code, container, component, sourcePath);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  /** ```tasks 块：探测 Tasks 的 api 入口（插件 api 或全局 tasksApiV3），结果渲染成 markdown。 */
-  async renderTasksQuery(query, sourcePath, container, component) {
-    var _a;
-    try {
-      const api = this.tasksApi();
-      if (api === null) return false;
-      const run = (_a = api.executeTasksQuery) != null ? _a : api.executeQuery;
-      if (typeof run !== "function") return false;
-      const result = await run.call(api, query, sourcePath);
-      let markdown = "";
-      if (typeof result === "string") {
-        markdown = result;
-      } else {
-        const tasks = Array.isArray(result) ? result : Array.isArray(result == null ? void 0 : result.tasks) ? result.tasks : [];
-        markdown = tasks.map(
-          (task) => typeof task.toMarkdown === "function" ? task.toMarkdown() : typeof task.toString === "function" ? String(task) : ""
-        ).filter((line) => line !== "").join("\n");
-      }
-      if (markdown === "") return false;
-      await import_obsidian6.MarkdownRenderer.render(this.app, markdown, container, sourcePath, component);
+      if (kind === "tasks" && !this.tasksAvailable) return false;
+      if (kind !== "tasks" && !this.dataviewAvailable) return false;
+      const fenced = `\`\`\`${kind}
+${code.replace(/\s+$/, "")}
+\`\`\`
+`;
+      container.empty();
+      await import_obsidian6.MarkdownRenderer.render(this.app, fenced, container, sourcePath, component);
       return true;
     } catch (e) {
       return false;
@@ -1707,6 +1659,7 @@ function renderTrend(card, ctx) {
   select.onchange = async () => {
     config.trendSelection = select.value;
     await ctx.plugin.saveConfig();
+    ctx.rerender();
   };
   renderSparkline(card, selected, ctx.days);
 }
@@ -1915,14 +1868,7 @@ async function renderQueryPanel(card, app, ctx, detected) {
     wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
     const body = wrap.createDiv({ cls: "qj-query-body" });
     const source = block.source !== "" ? block.source : fallbackSource;
-    let ok = false;
-    if (block.kind === "dataview") {
-      ok = await bridge.renderDvQuery(block.code, source, body, ctx.component);
-    } else if (block.kind === "dataviewjs") {
-      ok = bridge.renderDvJs(block.code, body, ctx.component, source);
-    } else {
-      ok = await bridge.renderTasksQuery(block.code, source, body, ctx.component);
-    }
+    const ok = await bridge.renderQuery(block.kind, block.code, source, body, ctx.component);
     if (!ok) {
       body.empty();
       body.createDiv({
