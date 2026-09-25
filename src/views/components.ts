@@ -9,8 +9,6 @@ import type QuickJournalPlugin from "../main";
 import type { PeriodType, QueryKind } from "../types";
 import type { SectionEntry } from "../parse/section-entries";
 import { taskSymbol } from "../parse/line-ops";
-import { parseTasksQuery, taskText } from "../parse/tasks-query";
-import { NativeTasks } from "../services/tasks-native";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
 import { boolStats } from "../metrics/aggregate";
@@ -421,8 +419,7 @@ export function renderFeedMini(card: HTMLElement, ctx: SummaryCtx): void {
 }
 
 /** 查询块组件：只渲染用户手动添加的查询（无预设、不自动识别日志里的块）。
- * dataview / dataviewjs 委托 Dataview 官方入口（CW 同款）；
- * tasks 走原生子集执行（Tasks 插件没有公开查询 API），不支持的筛选行整体降级说明。 */
+ * dataview / dataviewjs 委托 Dataview 官方入口（CW 同款：executeJs / tryQueryMarkdown）。 */
 export async function renderQueryPanel(card: HTMLElement, app: App, ctx: SummaryCtx): Promise<void> {
 	const config = ctx.plugin.config;
 	if (ctx.editing) {
@@ -439,10 +436,6 @@ export async function renderQueryPanel(card: HTMLElement, app: App, ctx: Summary
 		const wrap = card.createDiv({ cls: "qj-query-block" });
 		wrap.createSpan({ cls: "qj-query-chip", text: q.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
-		if (q.kind === "tasks") {
-			await renderNativeTasks(app, ctx, q.code, body);
-			continue;
-		}
 		const ok =
 			q.kind === "dataview"
 				? await bridge.renderDvQuery(q.code, fallbackSource, body, ctx.component)
@@ -454,39 +447,6 @@ export async function renderQueryPanel(card: HTMLElement, app: App, ctx: Summary
 				text: bridge.dataviewAvailable ? t("渲染失败") : t("需要 Dataview 渲染"),
 			});
 		}
-	}
-}
-
-/** 原生执行 tasks 查询子集并渲染清单。 */
-async function renderNativeTasks(
-	app: App,
-	ctx: SummaryCtx,
-	code: string,
-	body: HTMLElement,
-): Promise<void> {
-	const query = parseTasksQuery(code);
-	if (query.unsupported.length > 0) {
-		body.createDiv({
-			cls: "qj-muted",
-			text: `${t("不支持的查询行")}: ${query.unsupported.join(" / ")}`,
-		});
-		body.createDiv({ cls: "qj-muted", text: t("支持的筛选说明") });
-		return;
-	}
-	const rows = await new NativeTasks(app).run(query);
-	if (rows.length === 0) {
-		body.createDiv({ cls: "qj-muted", text: t("没有匹配的任务") });
-		return;
-	}
-	for (const row of rows) {
-		const item = body.createDiv({ cls: "qj-query-task" });
-		item.createSpan({ cls: "qj-feed-toggle", text: taskSymbol(row.status) });
-		item.createSpan({ cls: "qj-query-task-text", text: taskText(row.line) });
-		item.createSpan({ cls: "qj-feed-meta", text: row.path });
-		item.onclick = () => {
-			const file = app.vault.getAbstractFileByPath(row.path);
-			if (file instanceof TFile) void app.workspace.getLeaf(false).openFile(file);
-		};
 	}
 }
 
@@ -510,7 +470,7 @@ function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 	}
 	const add = card.createDiv({ cls: "qj-query-add" });
 	const kindSel = add.createEl("select", { cls: "qj-input" });
-	for (const k of ["dataview", "dataviewjs", "tasks"] as QueryKind[]) {
+	for (const k of ["dataview", "dataviewjs"] as QueryKind[]) {
 		kindSel.createEl("option", { text: k, attr: { value: k } });
 	}
 	const code = add.createEl("textarea", { cls: "qj-input qj-textarea" });

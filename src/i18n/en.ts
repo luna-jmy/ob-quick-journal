@@ -67,6 +67,8 @@ export const EN: Record<string, string> = {
 	"不支持的查询行": "Unsupported query line",
 	"支持的筛选说明": "Supported: path / filename includes, tags include, done / not done, status.type is (not)",
 	"没有匹配的任务": "No matching tasks",
+	"展开录入": "Show capture bar",
+	"收起录入": "Hide capture bar",
 	"需要 Dataview 渲染": "Requires the Dataview plugin",
 	"需要 Tasks 渲染": "Requires the Tasks plugin",
 	"渲染失败": "Failed to render",

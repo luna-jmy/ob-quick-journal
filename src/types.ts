@@ -9,7 +9,8 @@
 
 export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph";
 export type PeriodType = "daily" | "weekly" | "monthly" | "annual";
-export type QueryKind = "dataview" | "dataviewjs" | "tasks";
+/** 查询组件支持的种类：Tasks 插件没有公开查询 API，只保留 Dataview（官方 api） */
+export type QueryKind = "dataview" | "dataviewjs";
 
 export interface SectionField {
 	/** 字段行键，可含 emoji（前缀如 💊medicine、后缀如 weight⚖️） */
@@ -185,7 +186,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph"];
 const PERIOD_TYPES: PeriodType[] = ["daily", "weekly", "monthly", "annual"];
-const QUERY_KINDS: QueryKind[] = ["dataview", "dataviewjs", "tasks"];
+const QUERY_KINDS: QueryKind[] = ["dataview", "dataviewjs"];
 
 function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | null {
 	if (!isRecord(raw)) return null;

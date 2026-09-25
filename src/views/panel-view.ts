@@ -37,6 +37,8 @@ export class PanelView extends ItemView {
 	private filterId = "";
 	private showDone = true;
 	private searchText = "";
+	/** 顶部功能区收起（手机端把内容区顶上来） */
+	private collapsed = false;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: QuickJournalPlugin) {
 		super(leaf);
@@ -94,6 +96,32 @@ export class PanelView extends ItemView {
 		root.empty();
 		root.addClass("qj-panel-root");
 
+		// 常驻细栏：展开/收起顶部功能区（手机端收起后内容区立刻顶上来）
+		const bar = root.createDiv({ cls: "qj-panel-toggle" });
+		const toggle = bar.createEl("button", {
+			cls: `qj-btn qj-icon-btn${this.collapsed ? " is-active" : ""}`,
+		});
+		toggle.type = "button";
+		toggle.setAttribute("aria-label", this.collapsed ? t("展开录入") : t("收起录入"));
+		setIcon(toggle, this.collapsed ? "chevrons-down" : "chevrons-up");
+		toggle.onclick = () => {
+			this.collapsed = !this.collapsed;
+			this.render();
+		};
+		bar.createSpan({
+			cls: "qj-panel-toggle-label",
+			text: this.collapsed ? t("展开录入") : t("收起录入"),
+		});
+
+		if (!this.collapsed) {
+			this.renderToolbar(root);
+			this.renderInput(root);
+		}
+		this.feedEl = root.createDiv({ cls: "qj-feed" });
+		void this.loadFeed();
+	}
+
+	private renderToolbar(root: HTMLElement): void {
 		// ── 工具栏 ──
 		const toolbar = root.createDiv({ cls: "qj-feed-toolbar" });
 		for (const days of [7, 30]) {
@@ -143,10 +171,6 @@ export class PanelView extends ItemView {
 		refresh.type = "button";
 		setIcon(refresh, "refresh-cw");
 		refresh.onclick = () => void this.loadFeed();
-
-		this.renderInput(root);
-		this.feedEl = root.createDiv({ cls: "qj-feed" });
-		void this.loadFeed();
 	}
 
 	private renderInput(root: HTMLElement): void {
