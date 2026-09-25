@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T15:31:12.793Z */
+/* Quick Journal — bundled 2026-09-25T15:34:48.743Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -559,7 +559,7 @@ function planParagraph(lines, opts) {
     const creates2 = textLines.map((line) => ({ afterLineIndex: headingIndex, line }));
     return { status: "ok", edits: [], creates: creates2, existingContent: "" };
   }
-  const creates = textLines.length === 0 ? [{ afterLineIndex: headingIndex, line: "" }] : [...textLines, ""].map((line, i) => ({ afterLineIndex: headingIndex + i, line }));
+  const creates = textLines.length === 0 ? [{ afterLineIndex: headingIndex, line: "" }] : [...textLines, ""].map((line) => ({ afterLineIndex: headingIndex, line }));
   return {
     status: "ok",
     edits: [],
@@ -809,12 +809,22 @@ function collectEntries(date, lines, sections) {
         }
         if (inFence) continue;
         if (line.trimStart().startsWith("%%")) continue;
-        if (line.trim() !== "") content.push(line.trim());
+        content.push(line.trimEnd());
       }
-      if (content.length === 0) continue;
-      const joined = content.join("\n");
-      const ts = splitTimestamp(joined);
-      out.push({ date, sectionId: section.id, kind: "paragraph", ...ts });
+      while (content.length > 0 && content[0] === "") content.shift();
+      while (content.length > 0 && content[content.length - 1] === "") content.pop();
+      if (content.every((l) => l === "")) continue;
+      const firstIdx = content.findIndex((l) => l !== "");
+      const ts = splitTimestamp(content[firstIdx]);
+      if (ts.time !== void 0) content[firstIdx] = ts.text;
+      out.push({
+        date,
+        sectionId: section.id,
+        kind: "paragraph",
+        time: ts.time,
+        text: content.join("\n"),
+        content: content.join("\n")
+      });
       continue;
     }
     for (let i = start; i < end; i++) {
