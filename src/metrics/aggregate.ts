@@ -1,0 +1,120 @@
+/**
+ * 指标聚合（纯函数）：打卡率、数值统计、任务统计。
+ * 输入是 vault-index 采集好的 DayRecord，这里不做任何 IO。
+ */
+
+import type { FieldSection } from "../types";
+import { BOOL_YES, BOOL_NO } from "../types";
+import { parseTaskLines } from "../parse/task-lines";
+import type { DayRecord } from "./day-record";
+
+export interface BoolStat {
+	key: string;
+	label: string;
+	yes: number;
+	no: number;
+	/** 期间内没有任何该字段记录的天数 */
+	missingDays: number;
+}
+
+export interface NumberStat {
+	key: string;
+	label: string;
+	unit?: string;
+	count: number;
+	min: number;
+	max: number;
+	mean: number;
+	sum: number;
+	latest?: number;
+	latestDate?: string;
+}
+
+export interface TaskStat {
+	total: number;
+	done: number;
+	/** 期间内完成（✅ 日期在期间内，或无 ✅ 但笔记在期间内且已勾选） */
+	doneInPeriod: number;
+	/** 期间内新建（➕ 日期在期间内） */
+	createdInPeriod: number;
+}
+
+export function boolStats(
+	section: FieldSection,
+	days: string[],
+	records: Map<string, DayRecord>,
+): BoolStat[] {
+	return section.fields.map((f) => {
+		let yes = 0;
+		let no = 0;
+		let missingDays = 0;
+		for (const day of days) {
+			const rec = records.get(day);
+			const value = rec?.fieldValues[f.key];
+			if (value === undefined || value === "") {
+				missingDays++;
+			} else if (value === BOOL_YES) {
+				yes++;
+			} else if (value === BOOL_NO) {
+				no++;
+			} else {
+				// 非 bool 符号的值按「有记录」计，不正负
+				missingDays++;
+			}
+		}
+		return { key: f.key, label: f.label, yes, no, missingDays };
+	});
+}
+
+export function numberStats(
+	section: FieldSection,
+	days: string[],
+	records: Map<string, DayRecord>,
+): NumberStat[] {
+	return section.fields.map((f) => {
+		const samples: { date: string; value: number }[] = [];
+		for (const day of days) {
+			const raw = records.get(day)?.fieldValues[f.key];
+			if (raw === undefined || raw === "") continue;
+			const n = Number(raw);
+			if (Number.isFinite(n)) samples.push({ date: day, value: n });
+		}
+		if (samples.length === 0) {
+			return { key: f.key, label: f.label, unit: f.unit, count: 0, min: 0, max: 0, mean: 0, sum: 0 };
+		}
+		const values = samples.map((s) => s.value);
+		const sum = values.reduce((a, b) => a + b, 0);
+		const latest = samples[samples.length - 1];
+		return {
+			key: f.key,
+			label: f.label,
+			unit: f.unit,
+			count: samples.length,
+			min: Math.min(...values),
+			max: Math.max(...values),
+			mean: sum / samples.length,
+			sum,
+			latest: latest.value,
+			latestDate: latest.date,
+		};
+	});
+}
+
+export function taskStats(days: string[], records: Map<string, DayRecord>): TaskStat {
+	const daySet = new Set(days);
+	let total = 0;
+	let done = 0;
+	let doneInPeriod = 0;
+	let createdInPeriod = 0;
+	for (const rec of records.values()) {
+		for (const task of parseTaskLines(rec.taskLines)) {
+			total++;
+			if (task.done) {
+				done++;
+				if (!task.doneDate || daySet.has(task.doneDate)) doneInPeriod++;
+			}
+			if (task.createdDate && daySet.has(task.createdDate)) createdInPeriod++;
+		}
+	}
+	return { total, done, doneInPeriod, createdInPeriod };
+}
