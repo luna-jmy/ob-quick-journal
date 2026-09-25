@@ -196,6 +196,7 @@ export function renderTrend(card: HTMLElement, ctx: SummaryCtx): void {
 	select.onchange = async () => {
 		config.trendSelection = select.value;
 		await ctx.plugin.saveConfig();
+		ctx.rerender();
 	};
 
 	renderSparkline(card, selected, ctx.days);
@@ -449,14 +450,7 @@ export async function renderQueryPanel(
 		wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
 		const source = block.source !== "" ? block.source : fallbackSource;
-		let ok = false;
-		if (block.kind === "dataview") {
-			ok = await bridge.renderDvQuery(block.code, source, body, ctx.component);
-		} else if (block.kind === "dataviewjs") {
-			ok = bridge.renderDvJs(block.code, body, ctx.component, source);
-		} else {
-			ok = await bridge.renderTasksQuery(block.code, source, body, ctx.component);
-		}
+		const ok = await bridge.renderQuery(block.kind, block.code, source, body, ctx.component);
 		if (!ok) {
 			body.empty();
 			body.createDiv({

@@ -1,112 +1,45 @@
 /**
  * 查询块委托桥（内部 API 收口：app.plugins 只出现在本文件）。
- * 探测 + 降级：Dataview 用 tryQueryMarkdown / executeJs（官方暴露的执行入口），
- * Tasks 探测其 api，探测不到或调用失败一律返回 false，由组件显示降级说明。
- * 返回值 / 异常不做业务判断，只表达「渲染成功与否」。
+ * 思路（2026-09-25 v2）：不再探测 Dataview / Tasks 的具体 API 形状——把查询包回
+ * ` ```dataview / dataviewjs / tasks ` 围栏，交给 Obsidian 官方 MarkdownRenderer，
+ * 由对应插件自己注册的代码块处理器渲染。插件未启用时返回 false，组件显示降级说明。
  */
 
 import { MarkdownRenderer, type App, type Component } from "obsidian";
 
+export type QueryKind = "dataview" | "dataviewjs" | "tasks";
+
 export class QueryBridge {
 	constructor(private app: App) {}
 
-	private plugin(id: string): any | null {
-		const plugins = (this.app as any)["plugins"] as Record<string, any> | undefined;
-		return plugins?.[id] ?? null;
+	private enabled(pluginId: string): boolean {
+		const plugins = (this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } })
+			.plugins;
+		return plugins?.plugins?.[pluginId] != null;
 	}
 
 	get dataviewAvailable(): boolean {
-		return this.plugin("dataview")?.api != null;
+		return this.enabled("dataview");
 	}
 
 	get tasksAvailable(): boolean {
-		return this.tasksApi() !== null;
+		return this.enabled("obsidian-tasks");
 	}
 
-	/** Tasks 的 API 入口：插件实例 api 或全局 tasksApiV3（探测不到返回 null）。 */
-	private tasksApi(): any | null {
-		const viaPlugin = this.plugin("obsidian-tasks")?.api;
-		if (
-			viaPlugin &&
-			(typeof viaPlugin.executeTasksQuery === "function" ||
-				typeof viaPlugin.executeQuery === "function")
-		) {
-			return viaPlugin;
-		}
-		const globalApi = (globalThis as any).tasksApiV3;
-		if (globalApi && typeof globalApi.executeTasksQuery === "function") {
-			return globalApi;
-		}
-		return null;
-	}
-
-	/** ```dataview 块：tryQueryMarkdown 拿 markdown，再用官方 MarkdownRenderer 渲染。 */
-	async renderDvQuery(
-		query: string,
-		sourcePath: string,
-		container: HTMLElement,
-		component: Component,
-	): Promise<boolean> {
-		try {
-			const api = this.plugin("dataview")?.api;
-			if (typeof api?.tryQueryMarkdown !== "function") return false;
-			const md = await api.tryQueryMarkdown(query, sourcePath);
-			await MarkdownRenderer.render(this.app, md, container, sourcePath, component);
-			return true;
-		} catch {
-			return false;
-		}
-	}
-
-	/** ```dataviewjs 块：官方 executeJs 入口（CW 同款口径），不自己 eval。 */
-	renderDvJs(
+	/** 委托渲染：官方处理器管线（MarkdownRenderer → 各插件的代码块处理器）。 */
+	async renderQuery(
+		kind: QueryKind,
 		code: string,
-		container: HTMLElement,
-		component: Component,
-		sourcePath: string,
-	): boolean {
-		try {
-			const api = this.plugin("dataview")?.api;
-			if (typeof api?.executeJs !== "function") return false;
-			api.executeJs(code, container, component, sourcePath);
-			return true;
-		} catch {
-			return false;
-		}
-	}
-
-	/** ```tasks 块：探测 Tasks 的 api 入口（插件 api 或全局 tasksApiV3），结果渲染成 markdown。 */
-	async renderTasksQuery(
-		query: string,
 		sourcePath: string,
 		container: HTMLElement,
 		component: Component,
 	): Promise<boolean> {
 		try {
-			const api = this.tasksApi();
-			if (api === null) return false;
-			const run = api.executeTasksQuery ?? api.executeQuery;
-			if (typeof run !== "function") return false;
-			const result = await run.call(api, query, sourcePath);
-			let markdown = "";
-			if (typeof result === "string") {
-				markdown = result;
-			} else {
-				// API v3 的 executeTasksQuery 直接返回 Task[]；旧入口可能返回 { tasks }
-				const tasks: any[] = Array.isArray(result) ? result : Array.isArray(result?.tasks) ? result.tasks : [];
-				markdown = tasks
-					.map((task: any) =>
-						typeof task.toMarkdown === "function"
-							? task.toMarkdown()
-							: typeof task.toString === "function"
-								? String(task)
-								: "",
-					)
-					.filter((line: string) => line !== "")
-					.join("\n");
-			}
-			if (markdown === "") return false;
-			await MarkdownRenderer.render(this.app, markdown, container, sourcePath, component);
+			if (kind === "tasks" && !this.tasksAvailable) return false;
+			if (kind !== "tasks" && !this.dataviewAvailable) return false;
+			const fenced = `\`\`\`${kind}\n${code.replace(/\s+$/, "")}\n\`\`\`\n`;
+			container.empty();
+			await MarkdownRenderer.render(this.app, fenced, container, sourcePath, component);
 			return true;
 		} catch {
 			return false;
