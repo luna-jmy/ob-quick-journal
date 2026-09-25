@@ -30,6 +30,8 @@ export interface SectionEntry {
 	prefix?: string;
 	/** field：字段键 */
 	key?: string;
+	/** line：任务行的勾选框字符（" " / "x" / …），非任务行无 */
+	taskStatus?: string;
 }
 
 const BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
@@ -127,6 +129,7 @@ export function collectEntries(
 					prefix: line.slice(0, line.length - task[2].length),
 					lineIndex: i,
 					raw: line,
+					taskStatus: task[1],
 				});
 				continue;
 			}

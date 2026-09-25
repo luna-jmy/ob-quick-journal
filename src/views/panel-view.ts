@@ -1,7 +1,8 @@
 /**
- * 速记面板（qj-panel）：Thino 式内容流——顶部输入条直发列表标题区，
- * 下方按天聚合「开启内容汇总面板」的文本 / 列表标题区内容。
- * 日志文件变更后防抖自动刷新（对齐 TM 的 debounce 口径）。
+ * 速记面板（qj-panel）：Thino 式内容流。
+ * 工具栏：时间范围 · 标题筛选（同时控制输入目标与展示范围）· 显示已完成 · 搜索。
+ * 条目：任务可点状态符号切换完成、任务/列表互转、编辑、删除、跳转；
+ * 段落目标重发 = 进入编辑态（预填现有内容），不再走覆盖确认。
  */
 
 import {
@@ -24,12 +25,18 @@ import { t } from "../i18n";
 
 export const VIEW_TYPE_QJ_PANEL = "qj-panel";
 
+const FILTER_ALL = "__all__";
+
 export class PanelView extends ItemView {
 	private rangeDays = 7;
 	private entries: SectionEntry[] = [];
 	private feedEl: HTMLElement | null = null;
 	private inputEl: HTMLTextAreaElement | null = null;
 	private targetId = "";
+	/** 筛选（同时控制输入目标与展示范围）；空串 = 全部 */
+	private filterId = "";
+	private showDone = true;
+	private searchText = "";
 
 	constructor(leaf: WorkspaceLeaf, private plugin: QuickJournalPlugin) {
 		super(leaf);
@@ -66,11 +73,25 @@ export class PanelView extends ItemView {
 		super.onunload();
 	}
 
+	private panelSections(): JournalSection[] {
+		return this.plugin.config.sections.filter(
+			(s) =>
+				s.panel === true &&
+				(s.type === "text" || s.type === "list" || s.type === "paragraph"),
+		);
+	}
+
+	/** 输入条可直发的目标：列表（追加）与段落（一天一条，重发即编辑）。 */
+	private writableSections(): JournalSection[] {
+		return this.panelSections().filter((s) => s.type === "list" || s.type === "paragraph");
+	}
+
 	private render(): void {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("qj-panel-root");
 
+		// ── 工具栏 ──
 		const toolbar = root.createDiv({ cls: "qj-feed-toolbar" });
 		for (const days of [7, 30]) {
 			const btn = toolbar.createEl("button", {
@@ -83,6 +104,38 @@ export class PanelView extends ItemView {
 				this.render();
 			};
 		}
+
+		const filterDrop = new DropdownComponent(toolbar);
+		filterDrop.addOption(FILTER_ALL, t("全部"));
+		for (const s of this.panelSections()) {
+			filterDrop.addOption(s.id, s.heading.replace(/^#+\s*/, ""));
+		}
+		filterDrop.setValue(this.filterId || FILTER_ALL);
+		filterDrop.onChange((value) => {
+			this.filterId = value === FILTER_ALL ? "" : value;
+			this.render();
+		});
+
+		const doneBtn = toolbar.createEl("button", {
+			cls: `qj-btn qj-icon-btn${this.showDone ? " is-active" : ""}`,
+		});
+		doneBtn.type = "button";
+		doneBtn.setAttribute("aria-label", t("显示已完成"));
+		setIcon(doneBtn, this.showDone ? "eye" : "eye-off");
+		doneBtn.onclick = () => {
+			this.showDone = !this.showDone;
+			this.render();
+		};
+
+		const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
+		search.type = "search";
+		search.placeholder = t("搜索");
+		search.value = this.searchText;
+		search.oninput = () => {
+			this.searchText = search.value;
+			this.renderFeed();
+		};
+
 		const refresh = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
 		refresh.type = "button";
 		setIcon(refresh, "refresh-cw");
@@ -93,31 +146,36 @@ export class PanelView extends ItemView {
 		void this.loadFeed();
 	}
 
-	private panelSections(): JournalSection[] {
-		return this.plugin.config.sections.filter(
-			(s) => s.panel === true && (s.type === "text" || s.type === "list" || s.type === "paragraph"),
-		);
-	}
-
-	/** 输入条可直发的目标：列表（追加）与段落（一天一条，覆盖需确认）。 */
-	private writableSections(): JournalSection[] {
-		return this.panelSections().filter((s) => s.type === "list" || s.type === "paragraph");
-	}
-
 	private renderInput(root: HTMLElement): void {
-		const targets = this.writableSections();
+		// 筛选选中某个不可直发的标题区（如文本字段区）→ 输入条整体隐藏
+		const filterSection = this.filterId
+			? this.panelSections().find((s) => s.id === this.filterId)
+			: undefined;
+		if (filterSection && filterSection.type === "text") return;
+
+		let targets: JournalSection[];
+		if (filterSection) {
+			targets = [filterSection];
+		} else {
+			targets = this.writableSections();
+		}
 		if (targets.length === 0) return;
 		if (!targets.some((s) => s.id === this.targetId)) {
 			this.targetId = targets[0].id;
 		}
 
 		const wrap = root.createDiv({ cls: "qj-panel-input" });
-		const dropdown = new DropdownComponent(wrap);
-		dropdown.addOptions(
-			Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
-		);
-		dropdown.setValue(this.targetId);
-		dropdown.onChange((value) => (this.targetId = value));
+		if (targets.length > 1) {
+			const dropdown = new DropdownComponent(wrap);
+			dropdown.addOptions(
+				Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
+			);
+			dropdown.setValue(this.targetId);
+			dropdown.onChange((value) => (this.targetId = value));
+		}
+		this.targetId = targets.some((s) => s.id === this.targetId)
+			? this.targetId
+			: targets[0].id;
 
 		const input = wrap.createEl("textarea", { cls: "qj-input qj-textarea" });
 		input.rows = 2;
@@ -142,20 +200,37 @@ export class PanelView extends ItemView {
 		if (value === "") return;
 		const section = this.writableSections().find((s) => s.id === this.targetId);
 		if (!section) return;
+		if (this.inputEl) this.inputEl.value = "";
+
 		if (section.type === "paragraph") {
-			// 段落一天一条：已有内容时走确认弹窗（performCapture 里带 Notice 与确认流）
-			await this.plugin.performCapture(section, { values: {}, lineValue: value }, false);
-			if (this.inputEl) this.inputEl.value = "";
+			// 段落一天一条：已有内容 → 重发即编辑（预填），不再走覆盖确认
+			const today = dateKey(new Date());
+			const existing = await this.plugin.capture.paragraphContent(today, section);
+			if (existing !== "") {
+				new EntryEditModal(this.app, section.heading.replace(/^#+\s*/, ""), existing, true, (content) => {
+					void (async () => {
+						const result = await this.plugin.capture.editEntry(
+							section,
+							{ date: today, sectionId: section.id, kind: "paragraph", text: existing },
+							content,
+						);
+						if (!result.ok) new Notice(this.entryError(result.message));
+						await this.loadFeed();
+					})();
+				}).open();
+				return;
+			}
+			await this.plugin.performCapture(section, { values: {}, lineValue: value }, true);
 			await this.loadFeed();
 			return;
 		}
+
 		const result = await this.plugin.capture.performSection(
 			section,
 			{ values: {}, lineValue: value },
 			{ overwrite: false },
 		);
 		if (result.ok) {
-			if (this.inputEl) this.inputEl.value = "";
 			await this.loadFeed();
 		} else if (result.reason === "error") {
 			new Notice(`${t("写入失败")}: ${result.message}`);
@@ -165,13 +240,12 @@ export class PanelView extends ItemView {
 	private async loadFeed(): Promise<void> {
 		const sections = this.panelSections();
 		if (this.feedEl === null) return;
-		this.feedEl.empty();
 
 		if (sections.length === 0) {
-			this.feedEl.createDiv({ cls: "qj-empty", text: t("没有开启内容汇总面板的标题区") });
+			this.entries = [];
+			this.renderFeed();
 			return;
 		}
-
 		const index = new VaultIndex(this.app, this.plugin.config.dailyDir);
 		const today = new Date();
 		const days = Array.from({ length: this.rangeDays }, (_, i) => {
@@ -183,21 +257,43 @@ export class PanelView extends ItemView {
 		this.renderFeed();
 	}
 
+	private visibleEntries(sections: JournalSection[]): SectionEntry[] {
+		let list = this.entries;
+		if (this.filterId !== "") list = list.filter((e) => e.sectionId === this.filterId);
+		if (!this.showDone) {
+			list = list.filter((e) => !(e.taskStatus === "x" || e.taskStatus === "X"));
+		}
+		const q = this.searchText.trim().toLowerCase();
+		if (q !== "") {
+			const name = new Map(sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]));
+			list = list.filter(
+				(e) =>
+					e.text.toLowerCase().includes(q) ||
+					(e.label ?? "").toLowerCase().includes(q) ||
+					(name.get(e.sectionId) ?? "").toLowerCase().includes(q),
+			);
+		}
+		return list;
+	}
+
 	private renderFeed(): void {
 		const feed = this.feedEl;
 		if (feed === null) return;
 		feed.empty();
-		if (this.entries.length === 0) {
+		const sections = this.panelSections();
+		if (sections.length === 0) {
+			feed.createDiv({ cls: "qj-empty", text: t("没有开启内容汇总面板的标题区") });
+			return;
+		}
+		const entries = this.visibleEntries(sections);
+		if (entries.length === 0) {
 			feed.createDiv({ cls: "qj-empty", text: t("暂无内容，先去记一条") });
 			return;
 		}
 
-		const sections = this.panelSections();
-		const sectionName = new Map(
-			sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]),
-		);
+		const sectionName = new Map(sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]));
 		const byDate = new Map<string, SectionEntry[]>();
-		for (const entry of this.entries) {
+		for (const entry of entries) {
 			if (!byDate.has(entry.date)) byDate.set(entry.date, []);
 			byDate.get(entry.date)!.push(entry);
 		}
@@ -208,22 +304,56 @@ export class PanelView extends ItemView {
 			for (const entry of byDate.get(date)!) {
 				const section = sections.find((s) => s.id === entry.sectionId);
 				if (!section) continue;
-				const item = day.createDiv({ cls: "qj-feed-item" });
-
-				const head = item.createDiv({ cls: "qj-feed-head" });
-				const meta = head.createDiv({ cls: "qj-feed-meta" });
-				meta.createSpan({ text: sectionName.get(entry.sectionId) ?? "" });
-				if (entry.label) meta.createSpan({ cls: "qj-feed-label", text: entry.label });
-				if (entry.time) meta.createSpan({ cls: "qj-feed-time", text: entry.time });
-
-				const actions = head.createDiv({ cls: "qj-feed-actions" });
-				this.actionButton(actions, "pencil", t("编辑"), () => this.editEntry(section, entry));
-				this.actionButton(actions, "trash-2", t("删除"), () => this.deleteEntry(section, entry));
-				this.actionButton(actions, "arrow-up-right", t("打开日志"), () => this.jumpTo(date));
-
-				item.createDiv({ cls: "qj-feed-text", text: entry.text });
+				this.renderItem(day, date, section, entry, sectionName.get(entry.sectionId) ?? "");
 			}
 		}
+	}
+
+	private renderItem(
+		day: HTMLElement,
+		date: string,
+		section: JournalSection,
+		entry: SectionEntry,
+		name: string,
+	): void {
+		const item = day.createDiv({ cls: "qj-feed-item" });
+		const head = item.createDiv({ cls: "qj-feed-head" });
+		const meta = head.createDiv({ cls: "qj-feed-meta" });
+		// 任务条目：状态符号可点，直接切换完成
+		if (entry.taskStatus !== undefined) {
+			const toggle = meta.createEl("button", { cls: "qj-feed-toggle" });
+			toggle.type = "button";
+			toggle.setText(entry.taskStatus === "x" || entry.taskStatus === "X" ? "☑" : "☐");
+			toggle.setAttribute("aria-label", t("切换完成"));
+			toggle.onclick = (evt) => {
+				evt.stopPropagation();
+				void (async () => {
+					const r = await this.plugin.capture.toggleTaskEntry(section, entry);
+					if (!r.ok) new Notice(this.entryError(r.message));
+					await this.loadFeed();
+				})();
+			};
+		}
+		meta.createSpan({ text: name });
+		if (entry.label) meta.createSpan({ cls: "qj-feed-label", text: entry.label });
+		if (entry.time) meta.createSpan({ cls: "qj-feed-time", text: entry.time });
+
+		const actions = head.createDiv({ cls: "qj-feed-actions" });
+		// 列表行：任务/列表互转
+		if (entry.kind === "line") {
+			this.actionButton(actions, "repeat", t("任务/列表互转"), () => {
+				void (async () => {
+					const r = await this.plugin.capture.convertEntry(section, entry);
+					if (!r.ok) new Notice(this.entryError(r.message));
+					await this.loadFeed();
+				})();
+			});
+		}
+		this.actionButton(actions, "pencil", t("编辑"), () => this.editEntry(section, entry));
+		this.actionButton(actions, "trash-2", t("删除"), () => this.deleteEntry(section, entry));
+		this.actionButton(actions, "arrow-up-right", t("打开日志"), () => this.jumpTo(date));
+
+		item.createDiv({ cls: "qj-feed-text", text: entry.text });
 	}
 
 	private actionButton(parent: HTMLElement, icon: string, label: string, onClick: () => void): void {

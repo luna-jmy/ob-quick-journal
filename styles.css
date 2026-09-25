@@ -435,3 +435,238 @@
 	white-space: pre-wrap;
 	word-break: break-word;
 }
+
+/* ── 速记面板工具栏扩展 ────────────────────────────────────────────────── */
+
+.qj-search {
+	max-width: 12em;
+	padding: var(--size-2-1) var(--size-2-2);
+}
+
+.qj-feed-toggle {
+	background: transparent;
+	border: none;
+	padding: 0;
+	font-size: var(--font-ui-medium);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.qj-feed-toggle:hover {
+	color: var(--text-accent, var(--text-normal));
+}
+
+/* ── 快速录入条（汇总视图顶部） ────────────────────────────────────────── */
+
+.qj-capture-strip {
+	margin-bottom: var(--size-4-3);
+}
+
+.qj-capture-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-2-2);
+}
+
+/* ── 柱状图 ───────────────────────────────────────────────────────────── */
+
+.qj-bars {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	height: 120px;
+}
+
+.qj-bar-col {
+	flex: 1 1 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	height: 100%;
+	min-width: 0;
+}
+
+.qj-bar-v {
+	width: 100%;
+	background: var(--interactive-accent);
+	border-radius: var(--radius-s) var(--radius-s) 0 0;
+	color: var(--text-on-accent);
+	font-size: 10px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding-top: 2px;
+	min-height: 2px;
+}
+
+.qj-bar-l {
+	font-size: 9px;
+	color: var(--text-muted);
+	white-space: nowrap;
+	margin-top: 2px;
+}
+
+/* ── 热力图 ───────────────────────────────────────────────────────────── */
+
+.qj-heatmap {
+	display: grid;
+	grid-auto-flow: column;
+	grid-template-rows: repeat(7, 1fr);
+	gap: 2px;
+	justify-content: start;
+	overflow-x: auto;
+	padding-bottom: var(--size-2-1);
+}
+
+.qj-hm-cell {
+	width: 11px;
+	height: 11px;
+	border-radius: 2px;
+	background: var(--background-modifier-border);
+}
+
+.qj-hm-l1 {
+	background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+
+.qj-hm-l2 {
+	background: color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+}
+
+.qj-hm-l3 {
+	background: color-mix(in srgb, var(--interactive-accent) 70%, transparent);
+}
+
+.qj-hm-l4 {
+	background: var(--interactive-accent);
+}
+
+/* ── 数据趋势（SVG 折线） ─────────────────────────────────────────────── */
+
+.qj-trend-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-3);
+	padding: var(--size-2-1) 0;
+}
+
+.qj-trend-svg {
+	flex: 1 1 auto;
+	height: 30px;
+	color: var(--interactive-accent);
+}
+
+.qj-trend-svg polyline {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
+
+/* ── 月历 ─────────────────────────────────────────────────────────────── */
+
+.qj-cal {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+}
+
+.qj-cal-head {
+	font-size: var(--font-ui-smallest, 10px);
+	color: var(--text-muted);
+	text-align: center;
+	padding: 2px 0;
+}
+
+.qj-cal-cell {
+	min-height: 2.6em;
+	border-radius: var(--radius-s);
+	padding: 2px 4px;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	position: relative;
+	cursor: pointer;
+	border: 1px solid transparent;
+}
+
+.qj-cal-cell:hover {
+	background: var(--background-modifier-hover);
+}
+
+.qj-cal-cell.is-today {
+	border-color: var(--interactive-accent);
+}
+
+.qj-cal-out {
+	opacity: 0.35;
+}
+
+.qj-cal-day {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-normal);
+}
+
+.qj-cal-badge {
+	align-self: flex-start;
+	font-size: 9px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: var(--radius-s);
+	padding: 0 3px;
+}
+
+.qj-cal-dot {
+	position: absolute;
+	bottom: 3px;
+	right: 4px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--text-accent, var(--text-muted));
+}
+
+/* ── 最近速记 ─────────────────────────────────────────────────────────── */
+
+.qj-mini-row {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: var(--size-2-1) 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.qj-mini-row:last-of-type {
+	border-bottom: none;
+}
+
+.qj-mini-text {
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ── 查询块 ───────────────────────────────────────────────────────────── */
+
+.qj-query-block {
+	margin-bottom: var(--size-4-2);
+}
+
+.qj-query-chip {
+	display: inline-block;
+	font-size: var(--font-ui-smallest, 10px);
+	color: var(--text-muted);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 0 4px;
+	margin-bottom: var(--size-2-1);
+}
+
+.qj-query-body {
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: var(--size-2-3);
+	overflow-x: auto;
+}

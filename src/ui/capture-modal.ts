@@ -21,6 +21,8 @@ export class CaptureModal extends Modal {
 		private type: SectionType,
 		private fields: SectionField[],
 		private onSubmit: (payload: { values: Record<string, string>; lineValue?: string }) => void,
+		/** list / paragraph 预填内容（段落重发 = 编辑态） */
+		private initial = "",
 	) {
 		super(app);
 	}
@@ -34,6 +36,7 @@ export class CaptureModal extends Modal {
 			row.createEl("label", { cls: "qj-field-label", text: t("内容") });
 			const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
 			input.rows = this.type === "paragraph" ? 6 : 2;
+			if (this.initial !== "") input.value = this.initial;
 			input.onchange = () => (this.lineValue = input.value);
 		} else {
 			for (const field of this.fields) {

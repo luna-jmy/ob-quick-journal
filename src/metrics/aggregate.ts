@@ -118,3 +118,20 @@ export function taskStats(days: string[], records: Map<string, DayRecord>): Task
 	}
 	return { total, done, doneInPeriod, createdInPeriod };
 }
+
+/**
+ * 按日完成任务数（热力图 / 柱状图用）：✅ 日期优先，无 ✅ 的已完成按笔记日记入。
+ * 键为 YYYY-MM-DD，覆盖 days 里出现的每一天（无数据的也为 0）。
+ */
+export function doneByDay(days: string[], records: Map<string, DayRecord>): Map<string, number> {
+	const out = new Map<string, number>();
+	for (const day of days) out.set(day, 0);
+	for (const rec of records.values()) {
+		for (const task of parseTaskLines(rec.taskLines)) {
+			if (!task.done) continue;
+			const key = task.doneDate ?? rec.date;
+			if (out.has(key)) out.set(key, (out.get(key) ?? 0) + 1);
+		}
+	}
+	return out;
+}

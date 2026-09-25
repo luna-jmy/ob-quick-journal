@@ -6,6 +6,7 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import type { JournalSection, QJConfig } from "./types";
 import { mergeConfig } from "./types";
+import { dateKey } from "./periods/period";
 import { setLanguage, t } from "./i18n";
 import { CaptureService } from "./services/capture-service";
 import { CaptureModal } from "./ui/capture-modal";
@@ -86,6 +87,22 @@ export default class QuickJournalPlugin extends Plugin {
 	}
 
 	openSectionCapture(section: JournalSection): void {
+		if (section.type === "paragraph") {
+			// 段落重发 = 编辑态：预填当天现有内容，提交即整段重写（无需覆盖确认）
+			void this.capture
+				.paragraphContent(dateKey(new Date()), section)
+				.then((initial) => {
+					new CaptureModal(
+						this.app,
+						section.heading.replace(/^#+\s*/, ""),
+						section.type,
+						section.fields,
+						(payload) => void this.performCapture(section, payload, true),
+						initial,
+					).open();
+				});
+			return;
+		}
 		new CaptureModal(
 			this.app,
 			section.heading.replace(/^#+\s*/, ""),
@@ -119,11 +136,16 @@ export default class QuickJournalPlugin extends Plugin {
 		new Notice(`${t("写入失败")}: ${result.message}`);
 	}
 
-	private async activateView(viewType: string): Promise<void> {
+	/** 打开（或聚焦）某个视图；组件卡里的入口也用它。 */
+	async openView(viewType: string): Promise<void> {
 		const { workspace } = this.app;
 		const existing = workspace.getLeavesOfType(viewType);
 		const leaf = existing.length > 0 ? existing[0] : workspace.getLeaf("tab");
 		await leaf.setViewState({ type: viewType, active: true });
 		await workspace.revealLeaf(leaf);
+	}
+
+	private async activateView(viewType: string): Promise<void> {
+		await this.openView(viewType);
 	}
 }

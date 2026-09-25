@@ -54,4 +54,22 @@ export default [
 			"@typescript-eslint/no-deprecated": "warn",
 		},
 	},
+	/*
+	 * 既定例外（通用约束「内部 API 收口」）：dataview-bridge 是访问 app.plugins 的
+	 * 唯一文件，桥的两端是第三方插件的动态 API（结构不可静态知），no-unsafe 系列对
+	 * 它没有意义。例外写进配置（可 review、可删除），不在行内绕过——同 ob-workspace
+	 * script-runner 的口径。对外返回值仍一律 boolean，不外漏 any。
+	 */
+	{
+		files: ["src/services/dataview-bridge.ts"],
+		rules: {
+			"@typescript-eslint/no-explicit-any": "off",
+			"@typescript-eslint/no-unsafe-assignment": "off",
+			"@typescript-eslint/no-unsafe-call": "off",
+			"@typescript-eslint/no-unsafe-member-access": "off",
+			"@typescript-eslint/no-unsafe-argument": "off",
+			"@typescript-eslint/no-unsafe-return": "off",
+			"@typescript-eslint/no-redundant-type-constituents": "off",
+		},
+	},
 ];

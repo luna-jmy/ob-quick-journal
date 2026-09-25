@@ -16,7 +16,9 @@ import {
 import { targetNotePath } from "../capture/variables";
 import { dailySkeleton } from "../capture/skeleton";
 import { renderFieldLine } from "../parse/field-lines";
-import type { SectionEntry } from "../parse/section-entries";
+import { collectEntries, type SectionEntry } from "../parse/section-entries";
+import { convertListTask, toggleTaskLine } from "../parse/line-ops";
+import { dateKey } from "../periods/period";
 import { applyPlanToFile, ensureNote, readNoteText } from "./file-writer";
 
 export type CaptureResult =
@@ -130,6 +132,61 @@ export class CaptureService {
 	/** 删除一条流条目：line 删行，field 清值回空值行，paragraph 清空整段。 */
 	async deleteEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
 		return this.mutateEntry(section, entry, null);
+	}
+
+	/** 切换任务完成态（面板点击状态符号）。 */
+	async toggleTaskEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
+		return this.rewriteRawLine(section, entry, (raw) => {
+			const today = dateKey(new Date());
+			return toggleTaskLine(raw, today);
+		});
+	}
+
+	/** 列表 ↔ 任务互转（面板条目按钮）。 */
+	async convertEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
+		return this.rewriteRawLine(section, entry, convertListTask);
+	}
+
+	private async rewriteRawLine(
+		_section: JournalSection,
+		entry: SectionEntry,
+		build: (raw: string) => string | null,
+	): Promise<EntryWriteResult> {
+		if (entry.lineIndex === undefined || entry.raw === undefined) {
+			return { ok: false, message: "not a line entry" };
+		}
+		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${entry.date}.md`;
+		let text: string;
+		try {
+			text = await readNoteText(this.app, path);
+		} catch {
+			return { ok: false, message: `note not found: ${entry.date}` };
+		}
+		const lines = text.split(/\r?\n/);
+		if (entry.lineIndex >= lines.length || lines[entry.lineIndex] !== entry.raw) {
+			return { ok: false, message: "stale-line" };
+		}
+		const newLine = build(entry.raw);
+		if (newLine === null) return { ok: false, message: "unsupported line" };
+		await applyPlanToFile(this.app, path, planEditLineAt(entry.lineIndex, newLine));
+		return { ok: true };
+	}
+
+	/** 段落「重发 = 编辑」：取当天段落现有内容做表单预填（空返回 ""）。 */
+	async paragraphContent(dateStr: string, section: JournalSection): Promise<string> {
+		const path = `${this.getConfig().dailyDir.replace(/\/+$/, "")}/${dateStr}.md`;
+		let text: string;
+		try {
+			text = await readNoteText(this.app, path);
+		} catch {
+			return "";
+		}
+		const entries = collectEntries(
+			dateStr,
+			text.split(/\r?\n/),
+			[section],
+		);
+		return entries[0]?.content ?? "";
 	}
 
 	private async mutateEntry(
