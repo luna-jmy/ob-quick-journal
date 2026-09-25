@@ -1,265 +1,166 @@
 /**
- * 领域模型 + 默认值 + config 合并（纯函数，零 DOM、不 import obsidian）。
+ * 领域模型 + 默认值 + config 合并/迁移（纯函数，零 DOM、不 import obsidian）。
  *
- * 字段注册表（FieldRegistry）是唯一源：捕获表单、笔记骨架、统计口径都从它出发。
- * 默认口径 = Luna 现行 TPL-Daily / TPL-Weekly / TPL-Monthly 模板里的字段行
- * （见 ob-tdk-general/specs/ob-quick-journal/ref-ob-templates/）。
+ * v0.2 起配置单元是「标题区」（JournalSection）：日志里的一个标题对应一块录入配置。
+ * - 有内联字段的标题区按类型填值（打卡 / 数据 / 文本）；
+ * - 没有内联字段的标题区是列表，逐项追加内容；
+ * - 标题区可从模板笔记自动识别（src/parse/detect-sections.ts）。
+ * 范围仅日日志；周/月/年复盘另行开发，不在本模型内。
  */
 
-export type FieldKind = "bool" | "number" | "text";
+export type SectionType = "checkin" | "data" | "text" | "list";
 
-export interface FieldDef {
+export interface SectionField {
 	/** 字段行键，可含 emoji（前缀如 💊medicine、后缀如 weight⚖️） */
 	key: string;
-	/** 展示名（i18n 键，中文为源） */
+	/** 展示名（自动识别时默认为去 emoji 的键，可在设置改） */
 	label: string;
-	/** 单位含义（展示用） */
+	/** 单位含义（展示用，可空） */
 	unit?: string;
 }
 
-export interface FieldSection {
+export interface JournalSection {
+	/** 稳定标识，命令 ID 用（qj-<id>） */
 	id: string;
-	/** 模板里的标题行原文（含 # 前缀与 emoji），定位锚点 */
+	/** 日志里的标题行原文（含 # 前缀与 emoji），定位锚点 */
 	heading: string;
-	kind: FieldKind;
-	fields: FieldDef[];
-}
-
-export interface FieldRegistry {
-	daily: FieldSection[];
-	weekly: FieldSection[];
-	monthly: FieldSection[];
-	annual: FieldSection[];
-}
-
-export type FormFieldType = "bool" | "number" | "text" | "multiline";
-
-export interface CaptureField {
-	key: string;
-	label: string;
-	type: FormFieldType;
-	required?: boolean;
-}
-
-export interface CaptureActionDef {
-	id: string;
-	/** 动作名（i18n 键，中文为源），命令名与按钮都用它 */
-	nameKey: string;
-	icon: string;
-	/** fill = 按注册表定位填值；append = 渲染行模板追加 */
-	kind: "fill" | "append";
-	/** 目标期间：day = 当天日志；week = 本周复盘笔记 */
-	period: "day" | "week";
-	/** kind=fill 时：注册表 section id（在对应期间的 sections 里找） */
-	sectionId?: string;
-	/** kind=append 时：追加锚点标题 */
-	heading?: string;
-	/** kind=append 时：行模板，{{value}} 为表单值插值 */
+	type: SectionType;
+	/** 有内联字段的类型用；list 恒为空 */
+	fields: SectionField[];
+	/** list 类型用：追加行模板，默认 `- {{value}}`（GTD 等任务区可设 `- [ ] {{value}}`） */
 	lineTemplate?: string;
-	/** kind=append 时：自带表单字段 */
-	fields?: CaptureField[];
 }
 
 export interface QJConfig {
 	language: "auto" | "zh" | "en";
 	dailyDir: string;
-	weeklyDir: string;
-	monthlyDir: string;
-	annualDir: string;
-	registry: FieldRegistry;
-	actions: CaptureActionDef[];
+	/** 「从模板识别」读取的笔记路径（模板或任一日志） */
+	templateNote: string;
+	sections: JournalSection[];
 }
 
 export const BOOL_YES = "✔️";
 export const BOOL_NO = "❌";
 
-export const DEFAULT_REGISTRY: FieldRegistry = {
-	daily: [
-		{
-			id: "checkin",
-			heading: "### 每日打卡",
-			kind: "bool",
-			fields: [
-				{ key: "💊medicine", label: "吃药" },
-				{ key: "🧠flashcard", label: "卡片复习" },
-				{ key: "🧘‍♂️meditation", label: "冥想" },
-				{ key: "🍽️fasting", label: "轻断食" },
-			],
-		},
-		{
-			id: "data",
-			heading: "### 数据记录",
-			kind: "number",
-			fields: [
-				{ key: "weight⚖️", label: "体重", unit: "kg" },
-				{ key: "exercise🕓", label: "运动", unit: "分钟" },
-				{ key: "reading🕓", label: "阅读", unit: "分钟" },
-				{ key: "saving💰", label: "存入", unit: "元" },
-				{ key: "spent💰", label: "支出", unit: "元" },
-			],
-		},
-		{
-			id: "daily-review",
-			heading: "## ✍️ 今日小结与回顾",
-			kind: "text",
-			fields: [
-				{ key: "今天最满意的事", label: "最满意" },
-				{ key: "今天遇到的障碍或困难", label: "障碍困难" },
-				{ key: "今天印象最深刻的事", label: "印象最深" },
-				{ key: "明天想改进的事", label: "明天改进" },
-			],
-		},
-	],
-	weekly: [
-		{
-			id: "weekly-review",
-			heading: "## 🤔 周末回顾与总结",
-			kind: "text",
-			fields: [
-				{ key: "本周成就/亮点", label: "成就亮点" },
-				{ key: "本周关键项目/计划进展", label: "项目进展" },
-				{ key: "本周遇到的挑战/问题", label: "挑战问题" },
-				{ key: "下周需要调整的地方", label: "需要调整" },
-				{ key: "下周展望", label: "下周展望" },
-			],
-		},
-	],
-	monthly: [
-		{
-			id: "monthly-review",
-			heading: "## 🤔 月度回顾与总结",
-			kind: "text",
-			fields: [
-				{ key: "本月最大的成就/亮点", label: "成就亮点" },
-				{ key: "本月关键项目进展", label: "项目进展" },
-				{ key: "本月遇到的挑战/问题", label: "挑战问题" },
-				{ key: "下月需要调整的地方", label: "需要调整" },
-				{ key: "下月展望", label: "下月展望" },
-			],
-		},
-	],
-	annual: [],
-};
-
-export const DEFAULT_ACTIONS: CaptureActionDef[] = [
+export const DEFAULT_SECTIONS: JournalSection[] = [
 	{
-		id: "daily-checkin",
-		nameKey: "每日打卡",
-		icon: "check-circle",
-		kind: "fill",
-		period: "day",
-		sectionId: "checkin",
+		id: "checkin",
+		heading: "### 每日打卡",
+		type: "checkin",
+		fields: [
+			{ key: "💊medicine", label: "吃药" },
+			{ key: "🧠flashcard", label: "卡片复习" },
+			{ key: "🧘‍♂️meditation", label: "冥想" },
+			{ key: "🍽️fasting", label: "轻断食" },
+		],
 	},
 	{
-		id: "daily-data",
-		nameKey: "数据记录",
-		icon: "line-chart",
-		kind: "fill",
-		period: "day",
-		sectionId: "data",
+		id: "data",
+		heading: "### 数据记录",
+		type: "data",
+		fields: [
+			{ key: "weight⚖️", label: "体重", unit: "kg" },
+			{ key: "exercise🕓", label: "运动", unit: "分钟" },
+			{ key: "reading🕓", label: "阅读", unit: "分钟" },
+			{ key: "saving💰", label: "存入", unit: "元" },
+			{ key: "spent💰", label: "支出", unit: "元" },
+		],
 	},
 	{
 		id: "daily-review",
-		nameKey: "今日小结",
-		icon: "feather",
-		kind: "fill",
-		period: "day",
-		sectionId: "daily-review",
+		heading: "## ✍️ 今日小结与回顾",
+		type: "text",
+		fields: [
+			{ key: "今天最满意的事", label: "最满意" },
+			{ key: "今天遇到的障碍或困难", label: "障碍困难" },
+			{ key: "今天印象最深刻的事", label: "印象最深" },
+			{ key: "明天想改进的事", label: "明天改进" },
+		],
 	},
 	{
-		id: "weekly-review",
-		nameKey: "本周复盘",
-		icon: "calendar-check",
-		kind: "fill",
-		period: "week",
-		sectionId: "weekly-review",
-	},
-	{
-		id: "add-task",
-		nameKey: "加一条任务",
-		icon: "square-check",
-		kind: "append",
-		period: "day",
+		id: "gtd",
 		heading: "## 👀 GTD任务看板",
+		type: "list",
+		fields: [],
 		lineTemplate: "- [ ] {{value}}",
-		fields: [{ key: "value", label: "任务描述", type: "text", required: true }],
 	},
 	{
-		id: "add-note",
-		nameKey: "记一条灵感",
-		icon: "lightbulb",
-		kind: "append",
-		period: "day",
+		id: "ideas",
 		heading: "## 💡 灵感与思考",
-		lineTemplate: "- {{value}}",
-		fields: [{ key: "value", label: "内容", type: "text", required: true }],
+		type: "list",
+		fields: [],
 	},
 ];
 
 export const DEFAULT_CONFIG: QJConfig = {
 	language: "auto",
 	dailyDir: "500 Journal/540 Daily",
-	weeklyDir: "500 Journal/530 Weekly",
-	monthlyDir: "500 Journal/520 Monthly",
-	annualDir: "500 Journal/510 Annual",
-	registry: DEFAULT_REGISTRY,
-	actions: DEFAULT_ACTIONS,
+	templateNote: "",
+	sections: DEFAULT_SECTIONS,
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null;
 }
 
-/** 深合并用户保存的 config 到默认值上（逐级兜底，缺字段/坏类型取默认）。 */
+const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list"];
+
+function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | null {
+	if (!isRecord(raw)) return null;
+	const id = typeof raw.id === "string" && raw.id !== "" ? raw.id : `sec-${fallbackIndex}`;
+	const heading = typeof raw.heading === "string" ? raw.heading : "";
+	const type = SECTION_TYPES.includes(raw.type as SectionType) ? (raw.type as SectionType) : null;
+	if (heading === "" || type === null) return null;
+	const fields: SectionField[] = Array.isArray(raw.fields)
+		? raw.fields
+				.filter((f): f is Record<string, unknown> => isRecord(f) && typeof f.key === "string")
+				.map((f) => ({
+					key: String(f.key),
+					label: typeof f.label === "string" && f.label !== "" ? f.label : String(f.key),
+					...(typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}),
+				}))
+		: [];
+	const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : undefined;
+	return { id, heading, type, fields, ...(lineTemplate ? { lineTemplate } : {}) };
+}
+
+/** 深合并用户保存的 config 到默认值上（逐级兜底；v0.1 的 registry/actions 自动迁移）。 */
 export function mergeConfig(saved: unknown): QJConfig {
 	const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as QJConfig;
 	if (!isRecord(saved)) return base;
 	if (saved.language === "zh" || saved.language === "en" || saved.language === "auto") {
 		base.language = saved.language;
 	}
-	for (const key of ["dailyDir", "weeklyDir", "monthlyDir", "annualDir"] as const) {
-		if (typeof saved[key] === "string" && saved[key].trim() !== "") {
-			base[key] = saved[key];
-		}
+	if (typeof saved.dailyDir === "string" && saved.dailyDir.trim() !== "") {
+		base.dailyDir = saved.dailyDir;
 	}
-	if (isRecord(saved.registry)) {
-		for (const scope of ["daily", "weekly", "monthly", "annual"] as const) {
-			const savedScope = saved.registry[scope];
-			if (Array.isArray(savedScope)) {
-				base.registry[scope] = mergeSections(savedScope, base.registry[scope]);
+	if (typeof saved.templateNote === "string") {
+		base.templateNote = saved.templateNote;
+	}
+	if (Array.isArray(saved.sections)) {
+		const sections = saved.sections
+			.map((s, i) => sanitizeSection(s, i))
+			.filter((s): s is JournalSection => s !== null);
+		if (sections.length > 0) base.sections = sections;
+		return base;
+	}
+	// v0.1 迁移：registry.daily（bool/number/text）→ 标题区；周/月与 actions 丢弃（复盘另做）
+	if (isRecord(saved.registry) && Array.isArray(saved.registry.daily)) {
+		const kindMap: Record<string, SectionType> = { bool: "checkin", number: "data", text: "text" };
+		const migrated: JournalSection[] = (saved.registry.daily as unknown[])
+			.map((s, i) => {
+				if (!isRecord(s)) return null;
+				const type = kindMap[String(s.kind)] ?? "text";
+				return sanitizeSection({ ...s, type }, i);
+			})
+			.filter((s): s is JournalSection => s !== null);
+		if (migrated.length > 0) {
+			const ids = new Set(migrated.map((s) => s.id));
+			for (const extra of DEFAULT_SECTIONS) {
+				if (extra.type === "list" && !ids.has(extra.id)) migrated.push(extra);
 			}
+			base.sections = migrated;
 		}
-	}
-	if (Array.isArray(saved.actions)) {
-		base.actions = saved.actions.filter((a): a is CaptureActionDef =>
-			isRecord(a) && typeof a.id === "string" && typeof a.nameKey === "string",
-		);
 	}
 	return base;
-}
-
-function mergeSections(saved: unknown[], fallback: FieldSection[]): FieldSection[] {
-	const out: FieldSection[] = [];
-	for (const raw of saved) {
-		if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.heading !== "string") continue;
-		if (raw.kind !== "bool" && raw.kind !== "number" && raw.kind !== "text") continue;
-		const fields: FieldDef[] = Array.isArray(raw.fields)
-			? raw.fields.filter(
-					(f): f is FieldDef =>
-						isRecord(f) && typeof f.key === "string" && typeof f.label === "string",
-				)
-			: [];
-		out.push({ id: raw.id, heading: raw.heading, kind: raw.kind, fields });
-	}
-	if (out.length === 0) return fallback;
-	return out;
-}
-
-/** 从注册表取某期间类型的某个 section。 */
-export function findSection(
-	registry: FieldRegistry,
-	scope: keyof FieldRegistry,
-	sectionId: string,
-): FieldSection | undefined {
-	return registry[scope].find((s) => s.id === sectionId);
 }

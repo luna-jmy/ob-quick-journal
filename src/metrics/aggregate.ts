@@ -3,7 +3,7 @@
  * 输入是 vault-index 采集好的 DayRecord，这里不做任何 IO。
  */
 
-import type { FieldSection } from "../types";
+import type { SectionField } from "../types";
 import { BOOL_YES, BOOL_NO } from "../types";
 import { parseTaskLines } from "../parse/task-lines";
 import type { DayRecord } from "./day-record";
@@ -40,11 +40,11 @@ export interface TaskStat {
 }
 
 export function boolStats(
-	section: FieldSection,
+	fields: SectionField[],
 	days: string[],
 	records: Map<string, DayRecord>,
 ): BoolStat[] {
-	return section.fields.map((f) => {
+	return fields.map((f) => {
 		let yes = 0;
 		let no = 0;
 		let missingDays = 0;
@@ -67,11 +67,11 @@ export function boolStats(
 }
 
 export function numberStats(
-	section: FieldSection,
+	fields: SectionField[],
 	days: string[],
 	records: Map<string, DayRecord>,
 ): NumberStat[] {
-	return section.fields.map((f) => {
+	return fields.map((f) => {
 		const samples: { date: string; value: number }[] = [];
 		for (const day of days) {
 			const raw = records.get(day)?.fieldValues[f.key];

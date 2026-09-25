@@ -1,21 +1,13 @@
 /**
  * Quick Journal 入口：薄装配层——registerView / 命令 / ribbon / 设置。
- * 业务在 capture / parse / periods / metrics（纯函数）与 services / ui / views。
+ * 范围：日日志快速录入（按设置的标题区）；复盘与汇总增强另行开发。
  */
 
-import { Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import {
-	type CaptureActionDef,
-	type CaptureField,
-	type QJConfig,
-	mergeConfig,
-	findSection,
-	type FieldRegistry,
-} from "./types";
+import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import type { JournalSection, QJConfig } from "./types";
+import { mergeConfig } from "./types";
 import { setLanguage, t } from "./i18n";
 import { CaptureService } from "./services/capture-service";
-import { ensureNote, readNoteText } from "./services/file-writer";
-import { weeklySkeleton } from "./capture/skeleton";
 import { CaptureModal } from "./ui/capture-modal";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { ActionPickerModal } from "./ui/action-picker-modal";
@@ -44,16 +36,14 @@ export default class QuickJournalPlugin extends Plugin {
 			callback: () => void this.activateSummary(),
 		});
 
-		for (const action of this.config.actions) {
-			this.addCommand({
-				id: `capture-${action.id}`,
-				name: t(action.nameKey),
-				callback: () => this.openCapture(action),
-			});
+		for (const section of this.config.sections) {
+			this.addSectionCommand(section);
 		}
 
 		this.addRibbonIcon("notebook-pen", t("快速录入"), () => {
-			new ActionPickerModal(this.app, this.config.actions, (action) => this.openCapture(action)).open();
+			new ActionPickerModal(this.app, this.config.sections, (section) =>
+				this.openSectionCapture(section),
+			).open();
 		});
 
 		this.addSettingTab(new QJSettingTab(this.app, this));
@@ -63,38 +53,30 @@ export default class QuickJournalPlugin extends Plugin {
 		await this.saveData(this.config);
 	}
 
-	/** 表单字段来源：fill 动作取注册表 section，append 动作用自带字段。 */
-	private resolveFields(action: CaptureActionDef): CaptureField[] {
-		if (action.kind === "fill") {
-			const scope: keyof FieldRegistry = action.period === "week" ? "weekly" : "daily";
-			const section = findSection(this.config.registry, scope, action.sectionId ?? "");
-			if (!section) return [];
-			return section.fields.map((f) => ({
-				key: f.key,
-				label: f.label,
-				type: section.kind,
-			}));
-		}
-		return action.fields ?? [];
+	private addSectionCommand(section: JournalSection): void {
+		this.addCommand({
+			id: `qj-${section.id}`,
+			name: `${t("快速录入")}: ${section.heading.replace(/^#+\s*/, "")}`,
+			callback: () => this.openSectionCapture(section),
+		});
 	}
 
-	openCapture(action: CaptureActionDef): void {
-		const fields = this.resolveFields(action);
-		if (fields.length === 0) {
-			new Notice(`${t("定位失败")}: ${action.id}`);
-			return;
-		}
-		new CaptureModal(this.app, action, fields, (values) => {
-			void this.performCapture(action, values, false);
-		}).open();
+	openSectionCapture(section: JournalSection): void {
+		new CaptureModal(
+			this.app,
+			section.heading.replace(/^#+\s*/, ""),
+			section.type,
+			section.fields,
+			(payload) => void this.performCapture(section, payload, false),
+		).open();
 	}
 
 	private async performCapture(
-		action: CaptureActionDef,
-		values: Record<string, string>,
+		section: JournalSection,
+		payload: { values: Record<string, string>; lineValue?: string },
 		overwrite: boolean,
 	): Promise<void> {
-		const result = await this.capture.perform(action, values, { overwrite });
+		const result = await this.capture.performSection(section, payload, { overwrite });
 		if (result.ok) {
 			const note = result.created ? `${t("创建笔记")} · ` : "";
 			new Notice(`${note}${t("已写入")} ${result.path} (${result.writtenLines})`);
@@ -105,24 +87,11 @@ export default class QuickJournalPlugin extends Plugin {
 				this.app,
 				t("以下字段已有值，覆盖写入？"),
 				result.keys.join("\n"),
-				() => void this.performCapture(action, values, true),
+				() => void this.performCapture(section, payload, true),
 			).open();
 			return;
 		}
 		new Notice(`${t("写入失败")}: ${result.message}`);
-	}
-
-	/** 确保本周复盘笔记存在（骨架），返回文件。 */
-	async ensureWeeklyReview(date: Date): Promise<TFile | null> {
-		const path = this.capture.weeklyPath(date);
-		try {
-			await readNoteText(this.app, path);
-			const file = this.app.vault.getAbstractFileByPath(path);
-			return file instanceof TFile ? file : null;
-		} catch {
-			const skeleton = weeklySkeleton(date, this.config.registry);
-			return ensureNote(this.app, path, skeleton);
-		}
 	}
 
 	private async activateSummary(): Promise<void> {

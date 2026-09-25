@@ -19,7 +19,6 @@ export class VaultIndex {
 	constructor(
 		private app: App,
 		private dailyDir: string,
-		private weeklyDir: string,
 	) {}
 
 	private filesUnder(dir: string): TFile[] {
@@ -56,13 +55,6 @@ export class VaultIndex {
 		return { records, mtimeFallback };
 	}
 
-	/** 周复盘笔记文件（按文件名 YYYY-Www 找）。 */
-	weeklyFile(weekKey: string): TFile | null {
-		const target = `${this.weeklyDir.replace(/\/+$/, "")}/${weekKey}.md`;
-		const file = this.app.vault.getAbstractFileByPath(target);
-		return file instanceof TFile ? file : null;
-	}
-
 	private resolveDate(file: TFile): string | null {
 		// 1. frontmatter journal-date
 		const cache = this.app.metadataCache.getFileCache(file);
@@ -71,8 +63,7 @@ export class VaultIndex {
 		// 2. 文件名
 		const name = parseNoteDateKind(file.name);
 		if (name?.kind === "day") return name.key;
-		// 3. mtime 兜底（无法区分计入哪一天时返回 null，不计入期间）
-		void 0;
+		// 3. 兜底：无法定位到某一天的笔记不计入期间（口径：宁缺勿错）
 		return null;
 	}
 }

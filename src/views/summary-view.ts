@@ -1,9 +1,10 @@
 /**
- * 日志汇总视图（qj-summary）：期间工具栏 + 统计卡（任务 / 打卡 / 数据）+ 复盘区。
- * 原型阶段：统计全部来自本插件解析（无外部插件依赖）；图表与查询块区段后续里程碑接入。
+ * 日志汇总视图（qj-summary）：期间工具栏 + 统计卡（任务 / 打卡 / 数据）。
+ * 统计全部来自本插件对日日志的解析，按设置里的标题区类型决定展示哪些卡；
+ * 复盘与查询块区段另行开发，不在本视图。
  */
 
-import { ItemView, setIcon, type TFile, type WorkspaceLeaf } from "obsidian";
+import { ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import type QuickJournalPlugin from "../main";
 import { boolStats, numberStats, taskStats } from "../metrics/aggregate";
 import { VaultIndex } from "../services/vault-index";
@@ -13,7 +14,6 @@ import {
 	periodOf,
 	shiftPeriod,
 	dateKey,
-	weekKey,
 } from "../periods/period";
 import { t } from "../i18n";
 
@@ -108,24 +108,22 @@ export class SummaryView extends ItemView {
 
 	private async renderBody(body: HTMLElement): Promise<void> {
 		const config = this.plugin.config;
-		const index = new VaultIndex(this.app, config.dailyDir, config.weeklyDir);
+		const index = new VaultIndex(this.app, config.dailyDir);
 		const days = this.period.days.map(dateKey);
 		const { records } = await index.collectDayRecords(this.period.days);
 
-		const header = body.createDiv({ cls: "qj-period-header" });
-		header.createSpan({
+		body.createDiv({ cls: "qj-period-header" }).createSpan({
 			cls: "qj-period-count",
 			text: `${records.size} ${t("条日志")}`,
 		});
 
 		if (records.size === 0) {
-			body.createDiv({ cls: "qj-empty", text: t("本周还没有日志，先去记一条") });
+			body.createDiv({ cls: "qj-empty", text: t("本期还没有日志，先去记一条") });
 			return;
 		}
 
 		const cards = body.createDiv({ cls: "qj-cards" });
 
-		// 任务卡
 		const tasks = taskStats(days, records);
 		this.statCard(cards, t("任务"), [
 			{ label: t("完成"), value: String(tasks.doneInPeriod) },
@@ -133,25 +131,18 @@ export class SummaryView extends ItemView {
 			{ label: t("记录"), value: `${tasks.done}/${tasks.total}` },
 		]);
 
-		// 打卡卡（每字段一行 + 比例条）
-		for (const section of config.registry.daily) {
-			if (section.kind === "bool") {
-				const stats = boolStats(section, days, records);
-				const card = this.cardShell(cards, t("打卡"));
+		for (const section of config.sections) {
+			if (section.type === "checkin") {
+				const stats = boolStats(section.fields, days, records);
+				const card = this.cardShell(cards, section.heading.replace(/^#+\s*/, ""));
 				for (const s of stats) {
 					const row = card.createDiv({ cls: "qj-checkin-row" });
-					row.createSpan({ cls: "qj-checkin-label", text: t(s.label) });
+					row.createSpan({ cls: "qj-checkin-label", text: s.label });
 					const bar = row.createDiv({ cls: "qj-bar" });
 					const recorded = s.yes + s.no;
 					if (recorded > 0) {
-						bar.createSpan({
-							cls: "qj-bar-yes",
-							attr: { style: `flex-grow:${s.yes}` },
-						});
-						bar.createSpan({
-							cls: "qj-bar-no",
-							attr: { style: `flex-grow:${s.no}` },
-						});
+						bar.createSpan({ cls: "qj-bar-yes", attr: { style: `flex-grow:${s.yes}` } });
+						bar.createSpan({ cls: "qj-bar-no", attr: { style: `flex-grow:${s.no}` } });
 					}
 					row.createSpan({
 						cls: "qj-checkin-count",
@@ -161,49 +152,20 @@ export class SummaryView extends ItemView {
 								: `${t("缺")} ${s.missingDays}`,
 					});
 				}
-			} else if (section.kind === "number") {
-				const stats = numberStats(section, days, records);
-				const card = this.cardShell(cards, t("数据记录"));
+			} else if (section.type === "data") {
+				const stats = numberStats(section.fields, days, records);
+				const card = this.cardShell(cards, section.heading.replace(/^#+\s*/, ""));
 				for (const s of stats) {
 					const row = card.createDiv({ cls: "qj-data-row" });
-					row.createSpan({ cls: "qj-checkin-label", text: t(s.label) });
+					row.createSpan({ cls: "qj-checkin-label", text: s.label });
 					const unit = s.unit ? ` ${s.unit}` : "";
 					row.createSpan({
 						cls: "qj-data-value",
 						text: s.count > 0 ? `均值 ${s.mean.toFixed(1)}${unit}（${s.min}~${s.max}）` : "—",
 					});
 				}
-			} else {
-				// text 字段：原型阶段在汇总里不展开，只提示完成度
-				const card = this.cardShell(cards, t("今日小结"));
-				card.createDiv({
-					cls: "qj-muted",
-					text: `${section.fields.length} × ${t("记录")}`,
-				});
 			}
 		}
-
-		// 复盘区（周视图）：打开 / 创建本周复盘笔记
-		if (this.kind === "week") {
-			const card = this.cardShell(cards, t("复盘"));
-			const weekly = index.weeklyFile(weekKey(this.weekStartOfCurrentView()));
-			const btn = card.createEl("button", {
-				cls: "qj-btn",
-				text: weekly ? t("打开复盘笔记") : t("创建复盘笔记"),
-			});
-			btn.type = "button";
-			btn.onclick = async () => {
-				let file: TFile | null = weekly;
-				if (!file) {
-					file = await this.plugin.ensureWeeklyReview(this.period.start);
-				}
-				if (file) await this.app.workspace.getLeaf(false).openFile(file);
-			};
-		}
-	}
-
-	private weekStartOfCurrentView(): Date {
-		return this.kind === "week" ? this.period.start : new Date();
 	}
 
 	private cardShell(cards: HTMLElement, title: string): HTMLElement {

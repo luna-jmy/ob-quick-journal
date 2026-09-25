@@ -1,68 +1,70 @@
 /**
- * 捕获表单弹窗：按字段类型渲染触屏友好的控件。
- * bool → 三态大按钮（✔️ / ❌ / 留空跳过）；number → 数字输入；text / multiline → 输入框。
- * 留空的字段不写入（提交时直接丢弃）。
+ * 捕获表单弹窗：按标题区类型渲染。
+ * checkin → 每字段一组 ✔️/❌ 开关（不选 = 不写）；data → 数字输入；
+ * text → 文本输入；list → 单条内容输入（追加一行）。
+ * 插件表单不放脚本时代的「留空不写」之类提示——留空自然不写。
  */
 
 import { Modal, setIcon } from "obsidian";
-import type { CaptureActionDef, CaptureField } from "../types";
+import type { SectionField, SectionType } from "../types";
 import { BOOL_NO, BOOL_YES } from "../types";
 import { t } from "../i18n";
 
 export class CaptureModal extends Modal {
 	private values: Record<string, string> = {};
+	private lineValue = "";
 	private boolState: Record<string, "yes" | "no" | ""> = {};
 
 	constructor(
 		app: Modal["app"],
-		private action: CaptureActionDef,
-		private fields: CaptureField[],
-		private onSubmit: (values: Record<string, string>) => void,
+		private title: string,
+		private type: SectionType,
+		private fields: SectionField[],
+		private onSubmit: (payload: { values: Record<string, string>; lineValue?: string }) => void,
 	) {
 		super(app);
 	}
 
 	onOpen(): void {
-		this.titleEl.setText(t(this.action.nameKey));
+		this.titleEl.setText(this.title);
 		const form = this.contentEl.createDiv({ cls: "qj-form" });
 
-		for (const field of this.fields) {
+		if (this.type === "list") {
 			const row = form.createDiv({ cls: "qj-field" });
-			row.createEl("label", { cls: "qj-field-label", text: t(field.label) });
-
-			if (field.type === "bool") {
-				this.boolState[field.key] = "";
-				const seg = row.createDiv({ cls: "qj-boolseg" });
-				const options: { id: "yes" | "no" | ""; label: string; cls: string }[] = [
-					{ id: "yes", label: BOOL_YES, cls: "qj-bool-yes" },
-					{ id: "no", label: BOOL_NO, cls: "qj-bool-no" },
-					{ id: "", label: t("跳过（留空不写）"), cls: "qj-bool-skip" },
-				];
-				for (const opt of options) {
-					const btn = seg.createEl("button", {
-						cls: `qj-boolseg-btn ${opt.cls}`,
-						text: opt.label,
-					});
-					btn.type = "button";
-					btn.onclick = () => {
-						this.boolState[field.key] = opt.id;
-						seg.querySelectorAll(".qj-boolseg-btn").forEach((b) => b.removeClass("is-active"));
-						btn.addClass("is-active");
-					};
+			row.createEl("label", { cls: "qj-field-label", text: t("内容") });
+			const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
+			input.rows = 2;
+			input.onchange = () => (this.lineValue = input.value);
+		} else {
+			for (const field of this.fields) {
+				const row = form.createDiv({ cls: "qj-field" });
+				row.createEl("label", { cls: "qj-field-label", text: field.label });
+				if (this.type === "checkin") {
+					this.boolState[field.key] = "";
+					const seg = row.createDiv({ cls: "qj-boolseg" });
+					for (const opt of [
+						{ id: "yes" as const, label: BOOL_YES },
+						{ id: "no" as const, label: BOOL_NO },
+					]) {
+						const btn = seg.createEl("button", {
+							cls: "qj-boolseg-btn",
+							text: opt.label,
+						});
+						btn.type = "button";
+						btn.onclick = () => {
+							this.boolState[field.key] =
+								this.boolState[field.key] === opt.id ? "" : opt.id;
+							btn.toggleClass("is-active", this.boolState[field.key] === opt.id);
+						};
+					}
+				} else if (this.type === "data") {
+					const input = row.createEl("input", { cls: "qj-input", type: "number" });
+					input.inputMode = "decimal";
+					input.onchange = () => (this.values[field.key] = input.value);
+				} else {
+					const input = row.createEl("input", { cls: "qj-input", type: "text" });
+					input.onchange = () => (this.values[field.key] = input.value);
 				}
-			} else if (field.type === "number") {
-				const input = row.createEl("input", { cls: "qj-input", type: "number" });
-				input.inputMode = "decimal";
-				input.placeholder = t("跳过（留空不写）");
-				input.onchange = () => (this.values[field.key] = input.value);
-			} else if (field.type === "multiline") {
-				const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
-				input.placeholder = t("跳过（留空不写）");
-				input.onchange = () => (this.values[field.key] = input.value);
-			} else {
-				const input = row.createEl("input", { cls: "qj-input", type: "text" });
-				input.placeholder = t("跳过（留空不写）");
-				input.onchange = () => (this.values[field.key] = input.value);
 			}
 		}
 
@@ -75,15 +77,15 @@ export class CaptureModal extends Modal {
 			text: t("提交"),
 		});
 		submit.type = "button";
+		setIcon(submit.createSpan({ cls: "qj-btn-icon" }), "check");
 		submit.onclick = () => {
 			for (const [key, state] of Object.entries(this.boolState)) {
 				if (state === "yes") this.values[key] = BOOL_YES;
 				else if (state === "no") this.values[key] = BOOL_NO;
 				else delete this.values[key];
 			}
-			this.onSubmit({ ...this.values });
+			this.onSubmit({ values: { ...this.values }, lineValue: this.lineValue });
 			this.close();
 		};
-		setIcon(submit.createSpan({ cls: "qj-btn-icon" }), "check");
 	}
 }
