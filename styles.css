@@ -568,7 +568,7 @@
 .qj-heatmap {
 	display: grid;
 	grid-auto-flow: column;
-	grid-template-rows: repeat(7, 1fr);
+	grid-template-rows: repeat(7, max-content);
 	gap: 2px;
 	justify-content: stretch;
 	overflow-x: auto;
@@ -674,14 +674,35 @@
 
 .qj-trend-row {
 	display: flex;
-	align-items: center;
-	gap: var(--size-2-3);
+	align-items: stretch;
+	gap: var(--size-2-2);
 	padding: var(--size-2-1) 0;
 }
 
-.qj-trend-svg {
+.qj-trend-yaxis {
+	flex: 0 0 auto;
+	height: 56px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	align-items: flex-end;
+	font-size: 9px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	padding: 1px 0;
+}
+
+.qj-trend-plot {
 	flex: 1 1 auto;
-	height: 30px;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.qj-trend-svg {
+	width: 100%;
+	height: 56px;
 	color: var(--interactive-accent);
 }
 
@@ -690,6 +711,44 @@
 	stroke: currentColor;
 	stroke-width: 1.5;
 	vector-effect: non-scaling-stroke;
+}
+
+.qj-trend-svg circle {
+	fill: currentColor;
+}
+
+.qj-trend-svg .qj-trend-grid {
+	stroke: var(--background-modifier-border);
+	stroke-width: 1;
+	stroke-dasharray: 2 2;
+	vector-effect: non-scaling-stroke;
+}
+
+.qj-trend-svg .qj-trend-axis {
+	stroke: var(--background-modifier-border-hover);
+	stroke-width: 1;
+	vector-effect: non-scaling-stroke;
+}
+
+.qj-trend-xaxis {
+	display: flex;
+	justify-content: space-between;
+	font-size: 9px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	margin-top: 2px;
+}
+
+.qj-trend-stats {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
 }
 
 /* ── 月历 ─────────────────────────────────────────────────────────────── */

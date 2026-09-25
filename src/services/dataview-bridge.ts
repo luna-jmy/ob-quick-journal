@@ -91,9 +91,10 @@ export class QueryBridge {
 			let markdown = "";
 			if (typeof result === "string") {
 				markdown = result;
-			} else if (Array.isArray(result?.tasks)) {
-				// API v3 返回 { tasks: Task[] }：用任务对象自带的 markdown 序列化
-				markdown = result.tasks
+			} else {
+				// API v3 的 executeTasksQuery 直接返回 Task[]；旧入口可能返回 { tasks }
+				const tasks: any[] = Array.isArray(result) ? result : Array.isArray(result?.tasks) ? result.tasks : [];
+				markdown = tasks
 					.map((task: any) =>
 						typeof task.toMarkdown === "function"
 							? task.toMarkdown()

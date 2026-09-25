@@ -208,32 +208,82 @@ function renderSparkline(
 ): void {
 	const row = card.createDiv({ cls: "qj-trend-row" });
 	const values = days.map((d) => f.values.get(d)).filter((v): v is number => v !== undefined);
-	if (values.length < 2) {
-		row.createSpan({ cls: "qj-muted", text: values.length === 1 ? String(values[0]) : "—" });
+	if (values.length === 0) {
+		row.createSpan({ cls: "qj-muted", text: "—" });
 		return;
 	}
 	const min = Math.min(...values);
 	const max = Math.max(...values);
-	const span = max - min || 1;
+	const span = max - min;
 	const W = 100;
-	const H = 46;
+	const H = 60;
+	const PAD = 5;
+	// 全等值时画居中的平线（不再贴底）；正常时上下留边
+	const yOf = (v: number): number =>
+		span === 0 ? H / 2 : PAD + (1 - (v - min) / span) * (H - 2 * PAD);
 	const points = days
 		.map((day, i) => {
 			const v = f.values.get(day);
 			if (v === undefined) return null;
-			return { x: (i / (days.length - 1)) * W, y: H - ((v - min) / span) * H };
+			const x = days.length === 1 ? W - 3 : 2 + (i / (days.length - 1)) * (W - 4);
+			return { x, y: yOf(v) };
 		})
 		.filter((p): p is { x: number; y: number } => p !== null);
-	const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-	const svg = row.createSvg("svg", {
+
+	// Y 轴标签用 HTML 画（SVG 文本在拉伸坐标系里会变形）
+	const fmt = (v: number): string => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+	const yaxis = row.createDiv({ cls: "qj-trend-yaxis" });
+	yaxis.createSpan({ text: fmt(max) });
+	yaxis.createSpan({ text: fmt((max + min) / 2) });
+	yaxis.createSpan({ text: fmt(min) });
+
+	const plot = row.createDiv({ cls: "qj-trend-plot" });
+	const svg = plot.createSvg("svg", {
 		attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" },
 		cls: "qj-trend-svg",
 	});
+	// 网格（max/mid/min 三条虚线）+ 轴线
+	for (const y of [PAD, H / 2, H - PAD]) {
+		svg.appendChild(
+			createSvgEl(row, "line", {
+				x1: "2",
+				y1: y.toFixed(1),
+				x2: String(W - 2),
+				y2: y.toFixed(1),
+				"class": "qj-trend-grid",
+			}),
+		);
+	}
+	svg.appendChild(createSvgEl(row, "line", { x1: "2", y1: "0", x2: "2", y2: String(H), "class": "qj-trend-axis" }));
 	svg.appendChild(
-		createSvgEl(row, "polyline", { points: line }),
+		createSvgEl(row, "line", { x1: "0", y1: String(H - 1), x2: String(W), y2: String(H - 1), "class": "qj-trend-axis" }),
 	);
+	if (points.length >= 2) {
+		const line = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+		svg.appendChild(createSvgEl(row, "polyline", { points: line }));
+	}
+	for (const p of points) {
+		svg.appendChild(
+			createSvgEl(row, "circle", {
+				cx: p.x.toFixed(1),
+				cy: p.y.toFixed(1),
+				r: "2",
+			}),
+		);
+	}
+
+	// X 轴：首/中/尾日期
+	const xaxis = plot.createDiv({ cls: "qj-trend-xaxis" });
+	const mid = days[Math.floor((days.length - 1) / 2)] ?? days[0];
+	xaxis.createSpan({ text: days[0].slice(5) });
+	xaxis.createSpan({ text: mid.slice(5) });
+	xaxis.createSpan({ text: days[days.length - 1].slice(5) });
+
 	const unit = f.unit ? ` ${f.unit}` : "";
-	row.createSpan({ cls: "qj-data-value", text: `${values[values.length - 1]}${unit}` });
+	const stats = row.createDiv({ cls: "qj-trend-stats" });
+	stats.createSpan({ text: `${t("最新")} ${values[values.length - 1]}${unit}` });
+	stats.createSpan({ text: `${t("最大")} ${max}${unit}` });
+	stats.createSpan({ text: `${t("最小")} ${min}${unit}` });
 }
 
 function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, string>): SVGElement {

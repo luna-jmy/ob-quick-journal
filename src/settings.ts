@@ -34,6 +34,10 @@ export class QJSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
+		// 结构性变更（增删标题区/字段、类型切换等）需要整页重绘——
+		// 记住滚动位置，画完恢复，否则每次改动都跳回顶部
+		const scroller = this.containerEl.closest(".vertical-tab-content");
+		const scrollTop = scroller?.scrollTop ?? 0;
 		this.containerEl.empty();
 
 		new Setting(this.containerEl)
@@ -103,6 +107,7 @@ export class QJSettingTab extends PluginSettingTab {
 					).open();
 				}),
 		);
+		if (scroller !== null && scrollTop > 0) scroller.scrollTop = scrollTop;
 	}
 
 	/** 日/周/月/年 tab 切换。 */
