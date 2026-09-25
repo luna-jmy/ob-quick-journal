@@ -82,22 +82,6 @@ export class VaultIndex {
 		return file instanceof TFile ? file : null;
 	}
 
-	/** 期间逐日的笔记原文（查询块定位用）。 */
-	async periodTexts(days: Date[]): Promise<{ date: string; text: string }[]> {
-		const byDate = new Map<string, TFile>();
-		for (const file of this.filesUnder(this.dailyDir)) {
-			const date = this.resolveDate(file);
-			if (date) byDate.set(date, file);
-		}
-		const out: { date: string; text: string }[] = [];
-		for (const day of days) {
-			const file = byDate.get(dateKey(day));
-			if (!file) continue;
-			out.push({ date: dateKey(day), text: await this.app.vault.cachedRead(file) });
-		}
-		return out;
-	}
-
 	private resolveDate(file: TFile): string | null {
 		// 1. frontmatter journal-date
 		const cache = this.app.metadataCache.getFileCache(file);

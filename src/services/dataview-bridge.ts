@@ -1,45 +1,65 @@
 /**
- * 查询块委托桥（内部 API 收口：app.plugins 只出现在本文件）。
- * 思路（2026-09-25 v2）：不再探测 Dataview / Tasks 的具体 API 形状——把查询包回
- * ` ```dataview / dataviewjs / tasks ` 围栏，交给 Obsidian 官方 MarkdownRenderer，
- * 由对应插件自己注册的代码块处理器渲染。插件未启用时返回 false，组件显示降级说明。
+ * Dataview 委托桥（内部 API 收口：app.plugins 只出现在本文件）。
+ * 做法与 ob-workspace 的 PluginBridge 相同：探测 `dataview.api.executeJs`
+ * （官方暴露的执行入口）——
+ * - dataviewjs：`executeJs(code, container, component, filePath)`
+ * - dataview：`tryQueryMarkdown(code, sourcePath)` 拿 markdown 字符串，
+ *   再用官方 MarkdownRenderer 渲染（普通 markdown，无需处理器）
+ * 探测不到返回 false，由组件显示降级说明。
  */
 
 import { MarkdownRenderer, type App, type Component } from "obsidian";
 
-export type QueryKind = "dataview" | "dataviewjs" | "tasks";
+interface DataviewApi {
+	executeJs(code: string, container: HTMLElement, component: Component, filePath: string): Promise<void>;
+	tryQueryMarkdown?: (query: string, sourcePath: string) => Promise<string>;
+}
 
 export class QueryBridge {
 	constructor(private app: App) {}
 
-	private enabled(pluginId: string): boolean {
+	private dataview(): DataviewApi | undefined {
 		const plugins = (this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } })
 			.plugins;
-		return plugins?.plugins?.[pluginId] != null;
+		const api = (plugins?.plugins?.dataview as { api?: DataviewApi } | undefined)?.api;
+		return typeof api?.executeJs === "function" ? api : undefined;
 	}
 
 	get dataviewAvailable(): boolean {
-		return this.enabled("dataview");
+		return this.dataview() !== undefined;
 	}
 
-	get tasksAvailable(): boolean {
-		return this.enabled("obsidian-tasks");
-	}
-
-	/** 委托渲染：官方处理器管线（MarkdownRenderer → 各插件的代码块处理器）。 */
-	async renderQuery(
-		kind: QueryKind,
+	/** ```dataview 查询：tryQueryMarkdown + MarkdownRenderer。 */
+	async renderDvQuery(
 		code: string,
 		sourcePath: string,
 		container: HTMLElement,
 		component: Component,
 	): Promise<boolean> {
 		try {
-			if (kind === "tasks" && !this.tasksAvailable) return false;
-			if (kind !== "tasks" && !this.dataviewAvailable) return false;
-			const fenced = `\`\`\`${kind}\n${code.replace(/\s+$/, "")}\n\`\`\`\n`;
+			const api = this.dataview();
+			if (!api || typeof api.tryQueryMarkdown !== "function") return false;
+			const md = await api.tryQueryMarkdown(code, sourcePath);
 			container.empty();
-			await MarkdownRenderer.render(this.app, fenced, container, sourcePath, component);
+			await MarkdownRenderer.render(this.app, md, container, sourcePath, component);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/** ```dataviewjs：官方 executeJs 入口（CW 同款），不自己 eval。 */
+	async renderDvJs(
+		code: string,
+		sourcePath: string,
+		container: HTMLElement,
+		component: Component,
+	): Promise<boolean> {
+		try {
+			const api = this.dataview();
+			if (!api) return false;
+			container.empty();
+			await api.executeJs(code, container, component, sourcePath);
 			return true;
 		} catch {
 			return false;

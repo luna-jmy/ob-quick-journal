@@ -968,3 +968,29 @@
 	gap: var(--size-2-2);
 	margin-top: var(--size-2-3);
 }
+
+.qj-query-task {
+	display: flex;
+	align-items: baseline;
+	gap: var(--size-2-2);
+	padding: var(--size-1-1, 2px) 0;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.qj-query-task:hover {
+	background: var(--background-modifier-hover);
+}
+
+.qj-query-task-text {
+	flex: 1 1 auto;
+	font-size: var(--font-ui-small);
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.qj-query-task .qj-feed-meta {
+	flex: 0 0 auto;
+}

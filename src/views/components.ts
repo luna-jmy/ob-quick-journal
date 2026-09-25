@@ -4,12 +4,13 @@
  * 图表原生 SVG/CSS 自绘，只用 Obsidian CSS 变量（SPEC §6.1：不依赖 Charts）。
  */
 
-import type { App, Component } from "obsidian";
+import { TFile, type App, type Component } from "obsidian";
 import type QuickJournalPlugin from "../main";
 import type { PeriodType, QueryKind } from "../types";
 import type { SectionEntry } from "../parse/section-entries";
 import { taskSymbol } from "../parse/line-ops";
-import type { QueryBlock } from "../parse/query-blocks";
+import { parseTasksQuery, taskText } from "../parse/tasks-query";
+import { NativeTasks } from "../services/tasks-native";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
 import { boolStats } from "../metrics/aggregate";
@@ -419,50 +420,73 @@ export function renderFeedMini(card: HTMLElement, ctx: SummaryCtx): void {
 	more.onclick = () => void ctx.plugin.openView("qj-panel", ctx.plugin.config.viewLocations.panel);
 }
 
-/** 查询块组件：手工配置（编辑模式录入）+ 期内日志自动识别，合并去重后委托渲染。 */
-export async function renderQueryPanel(
-	card: HTMLElement,
-	app: App,
-	ctx: SummaryCtx,
-	detected: QueryBlock[],
-): Promise<void> {
+/** 查询块组件：只渲染用户手动添加的查询（无预设、不自动识别日志里的块）。
+ * dataview / dataviewjs 委托 Dataview 官方入口（CW 同款）；
+ * tasks 走原生子集执行（Tasks 插件没有公开查询 API），不支持的筛选行整体降级说明。 */
+export async function renderQueryPanel(card: HTMLElement, app: App, ctx: SummaryCtx): Promise<void> {
 	const config = ctx.plugin.config;
 	if (ctx.editing) {
 		renderQueryEditor(card, ctx);
 		return;
 	}
-
-	const custom: QueryBlock[] = config.summaryQueries.map((q) => ({
-		kind: q.kind,
-		code: q.code,
-		source: "",
-	}));
-	const all = [...custom, ...detected];
-	if (all.length === 0) {
+	if (config.summaryQueries.length === 0) {
 		card.createDiv({ cls: "qj-muted", text: t("暂无查询块") });
 		return;
 	}
-	// 手工查询没有源笔记路径——查询引擎需要上下文，回退到当天日日志
 	const fallbackSource = ctx.plugin.capture.dailyPath(new Date());
 	const bridge = new QueryBridge(app);
-	for (const block of all) {
+	for (const q of config.summaryQueries) {
 		const wrap = card.createDiv({ cls: "qj-query-block" });
-		wrap.createSpan({ cls: "qj-query-chip", text: block.kind });
+		wrap.createSpan({ cls: "qj-query-chip", text: q.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
-		const source = block.source !== "" ? block.source : fallbackSource;
-		const ok = await bridge.renderQuery(block.kind, block.code, source, body, ctx.component);
+		if (q.kind === "tasks") {
+			await renderNativeTasks(app, ctx, q.code, body);
+			continue;
+		}
+		const ok =
+			q.kind === "dataview"
+				? await bridge.renderDvQuery(q.code, fallbackSource, body, ctx.component)
+				: await bridge.renderDvJs(q.code, fallbackSource, body, ctx.component);
 		if (!ok) {
 			body.empty();
 			body.createDiv({
 				cls: "qj-muted",
-				text:
-					block.kind === "tasks" && !bridge.tasksAvailable
-						? t("需要 Tasks 渲染")
-						: block.kind !== "tasks" && !bridge.dataviewAvailable
-							? t("需要 Dataview 渲染")
-							: t("渲染失败"),
+				text: bridge.dataviewAvailable ? t("渲染失败") : t("需要 Dataview 渲染"),
 			});
 		}
+	}
+}
+
+/** 原生执行 tasks 查询子集并渲染清单。 */
+async function renderNativeTasks(
+	app: App,
+	ctx: SummaryCtx,
+	code: string,
+	body: HTMLElement,
+): Promise<void> {
+	const query = parseTasksQuery(code);
+	if (query.unsupported.length > 0) {
+		body.createDiv({
+			cls: "qj-muted",
+			text: `${t("不支持的查询行")}: ${query.unsupported.join(" / ")}`,
+		});
+		body.createDiv({ cls: "qj-muted", text: t("支持的筛选说明") });
+		return;
+	}
+	const rows = await new NativeTasks(app).run(query);
+	if (rows.length === 0) {
+		body.createDiv({ cls: "qj-muted", text: t("没有匹配的任务") });
+		return;
+	}
+	for (const row of rows) {
+		const item = body.createDiv({ cls: "qj-query-task" });
+		item.createSpan({ cls: "qj-feed-toggle", text: taskSymbol(row.status) });
+		item.createSpan({ cls: "qj-query-task-text", text: taskText(row.line) });
+		item.createSpan({ cls: "qj-feed-meta", text: row.path });
+		item.onclick = () => {
+			const file = app.vault.getAbstractFileByPath(row.path);
+			if (file instanceof TFile) void app.workspace.getLeaf(false).openFile(file);
+		};
 	}
 }
 

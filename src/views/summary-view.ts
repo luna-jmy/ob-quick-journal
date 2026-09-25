@@ -9,7 +9,6 @@ import { ItemView, setIcon, type WorkspaceLeaf } from "obsidian";
 import type QuickJournalPlugin from "../main";
 import { doneByDay, taskStats } from "../metrics/aggregate";
 import { VaultIndex } from "../services/vault-index";
-import { dedupeQueries, findQueryBlocks } from "../parse/query-blocks";
 import {
 	renderCalendar,
 	renderCheckin,
@@ -43,11 +42,7 @@ interface ComponentDef {
 	title: string;
 	/** 限定出现的期间类型（如月历不进年视图） */
 	kinds?: PeriodKind[];
-	render: (card: HTMLElement, ctx: SummaryCtx, extra: QueryExtras) => void | Promise<void>;
-}
-
-interface QueryExtras {
-	queries: ReturnType<typeof dedupeQueries>;
+	render: (card: HTMLElement, ctx: SummaryCtx) => void | Promise<void>;
 }
 
 export class SummaryView extends ItemView {
@@ -200,8 +195,8 @@ export class SummaryView extends ItemView {
 			},
 			{
 				id: "queries",
-				title: t("日志内查询块"),
-				render: (card, ctx, extra) => void renderQueryPanel(card, this.app, ctx, extra.queries),
+				title: t("查询"),
+				render: (card, ctx) => void renderQueryPanel(card, this.app, ctx),
 			},
 		];
 	}
@@ -225,13 +220,6 @@ export class SummaryView extends ItemView {
 		const entries = panelSections.length
 			? await index.collectEntries(this.period.days, panelSections)
 			: [];
-
-		const texts = await index.periodTexts(this.period.days);
-		const queries = dedupeQueries(
-			texts.flatMap(({ date, text }) =>
-				findQueryBlocks(text, `${config.journals.daily.dir}/${date}.md`),
-			),
-		);
 
 		const ctx: SummaryCtx = {
 			plugin: this.plugin,
@@ -264,7 +252,7 @@ export class SummaryView extends ItemView {
 			if (def.id !== "task-chart") {
 				card.createDiv({ cls: "qj-card-title", text: def.title });
 			}
-			await def.render(card, ctx, { queries });
+			await def.render(card, ctx);
 		}
 
 		if (this.editing) this.renderAddPalette(cards, defs);
