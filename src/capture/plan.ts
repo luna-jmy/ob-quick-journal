@@ -171,11 +171,13 @@ export function planParagraph(
 		const creates = textLines.map((line) => ({ afterLineIndex: headingIndex, line }));
 		return { status: "ok", edits: [], creates, existingContent: "" };
 	}
-	// 已有内容：删除重建；空文本（清空）只留一个空行保持间距
+	// 已有内容：删除重建；空文本（清空）只留一个空行保持间距。
+	// 全部行共用 headingIndex 锚点（同锚点按序逆插保持顺序）——
+	// 递增锚点会在删除位移后把行插到下一个标题后面（打散内容）
 	const creates =
 		textLines.length === 0
 			? [{ afterLineIndex: headingIndex, line: "" }]
-			: [...textLines, ""].map((line, i) => ({ afterLineIndex: headingIndex + i, line }));
+			: [...textLines, ""].map((line) => ({ afterLineIndex: headingIndex, line }));
 	return {
 		status: "ok",
 		edits: [],

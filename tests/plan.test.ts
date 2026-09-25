@@ -128,20 +128,20 @@ describe("planParagraph（一天一条整段文字）", () => {
 		expect(out.indexOf("第二行")).toBe(3);
 	});
 
-	it("已有内容 → 整段删除重建，existingContent 给预览（供覆盖确认）", () => {
-		const note = "# 日志\n## 今日随笔\n旧的第一行\n旧的第二行\n\n## 下一个标题\n";
+	it("已有内容 → 整段删除重建，落位紧贴标题且不打散到下一个标题后（回归）", () => {
+		const note = "# 日志\n## 今日随笔\n旧的一\n旧二\n旧三\n\n## 下一个标题\n";
 		const plan = planParagraph(note.split("\n"), {
 			heading: "## 今日随笔",
 			headingMissingCreates: true,
-			text: "新的整段",
+			text: "新一\n新二",
 		});
 		expect(plan.status).toBe("ok");
 		if (plan.status !== "ok") return;
-		expect(plan.existingContent).toBe("旧的第一行");
-		expect(plan.removeLines).toEqual({ start: 2, end: 5 });
-		const out = applyPlan(note, plan);
-		expect(out).not.toContain("旧的");
-		expect(out).toContain("## 今日随笔\n新的整段");
+		expect(plan.existingContent).toBe("旧的一");
+		expect(plan.removeLines).toEqual({ start: 2, end: 6 });
+		expect(applyPlan(note, plan)).toBe(
+			"# 日志\n## 今日随笔\n新一\n新二\n\n## 下一个标题\n",
+		);
 	});
 
 	it("标题缺失 → 创建标题并写入", () => {

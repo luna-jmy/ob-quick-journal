@@ -102,7 +102,7 @@ describe("时间戳与段落", () => {
 		expect(ideas[1].content).toBe("要做的任务");
 	});
 
-	it("段落一天一条：整段合成一个条目，前缀时间戳被剥离", () => {
+	it("段落一天一条：整段合成一个条目，前缀时间戳被剥离；段内空行与结构原样保留（编辑写回不改结构）", () => {
 		const entries = collectEntries("2026-09-25", NOTE.split("\n"), SECTIONS);
 		const diary = entries.filter((e) => e.sectionId === "diary");
 		expect(diary).toHaveLength(1);
@@ -111,5 +111,12 @@ describe("时间戳与段落", () => {
 			time: "21:05",
 			text: "今天写了一整段，\n第二行继续。",
 		});
+
+		const withBlank = collectEntries(
+			"2026-09-26",
+			["# 日志", "## 今日随笔", "第一段。", "", "第二段。"].join("\n").split("\n"),
+			SECTIONS,
+		);
+		expect(withBlank[0].text).toBe("第一段。\n\n第二段。");
 	});
 });

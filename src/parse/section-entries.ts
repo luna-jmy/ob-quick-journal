@@ -67,7 +67,8 @@ export function collectEntries(
 		let inFence = false;
 
 		if (section.type === "paragraph") {
-			// 一天一条：区段内的非空正文行合成一个条目（跳过代码块与注释）
+			// 一天一条：区段正文原样保留（含段内空行——编辑写回不改结构），
+			// 只跳过代码块与注释；首个非空行的时间戳前缀剥离为 time
 			const content: string[] = [];
 			for (let i = start; i < end; i++) {
 				const line = lines[i];
@@ -77,12 +78,22 @@ export function collectEntries(
 				}
 				if (inFence) continue;
 				if (line.trimStart().startsWith("%%")) continue;
-				if (line.trim() !== "") content.push(line.trim());
+				content.push(line.trimEnd());
 			}
-			if (content.length === 0) continue;
-			const joined = content.join("\n");
-			const ts = splitTimestamp(joined);
-			out.push({ date, sectionId: section.id, kind: "paragraph", ...ts });
+			while (content.length > 0 && content[0] === "") content.shift();
+			while (content.length > 0 && content[content.length - 1] === "") content.pop();
+			if (content.every((l) => l === "")) continue;
+			const firstIdx = content.findIndex((l) => l !== "");
+			const ts = splitTimestamp(content[firstIdx]);
+			if (ts.time !== undefined) content[firstIdx] = ts.text;
+			out.push({
+				date,
+				sectionId: section.id,
+				kind: "paragraph",
+				time: ts.time,
+				text: content.join("\n"),
+				content: content.join("\n"),
+			});
 			continue;
 		}
 
