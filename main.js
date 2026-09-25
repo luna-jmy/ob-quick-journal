@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T03:03:24.197Z */
+/* Quick Journal — bundled 2026-09-25T09:51:28.967Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -24,143 +24,83 @@ __export(main_exports, {
   default: () => QuickJournalPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian8 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/types.ts
 var BOOL_YES = "\u2714\uFE0F";
 var BOOL_NO = "\u274C";
-var DEFAULT_REGISTRY = {
-  daily: [
-    {
-      id: "checkin",
-      heading: "### \u6BCF\u65E5\u6253\u5361",
-      kind: "bool",
-      fields: [
-        { key: "\u{1F48A}medicine", label: "\u5403\u836F" },
-        { key: "\u{1F9E0}flashcard", label: "\u5361\u7247\u590D\u4E60" },
-        { key: "\u{1F9D8}\u200D\u2642\uFE0Fmeditation", label: "\u51A5\u60F3" },
-        { key: "\u{1F37D}\uFE0Ffasting", label: "\u8F7B\u65AD\u98DF" }
-      ]
-    },
-    {
-      id: "data",
-      heading: "### \u6570\u636E\u8BB0\u5F55",
-      kind: "number",
-      fields: [
-        { key: "weight\u2696\uFE0F", label: "\u4F53\u91CD", unit: "kg" },
-        { key: "exercise\u{1F553}", label: "\u8FD0\u52A8", unit: "\u5206\u949F" },
-        { key: "reading\u{1F553}", label: "\u9605\u8BFB", unit: "\u5206\u949F" },
-        { key: "saving\u{1F4B0}", label: "\u5B58\u5165", unit: "\u5143" },
-        { key: "spent\u{1F4B0}", label: "\u652F\u51FA", unit: "\u5143" }
-      ]
-    },
-    {
-      id: "daily-review",
-      heading: "## \u270D\uFE0F \u4ECA\u65E5\u5C0F\u7ED3\u4E0E\u56DE\u987E",
-      kind: "text",
-      fields: [
-        { key: "\u4ECA\u5929\u6700\u6EE1\u610F\u7684\u4E8B", label: "\u6700\u6EE1\u610F" },
-        { key: "\u4ECA\u5929\u9047\u5230\u7684\u969C\u788D\u6216\u56F0\u96BE", label: "\u969C\u788D\u56F0\u96BE" },
-        { key: "\u4ECA\u5929\u5370\u8C61\u6700\u6DF1\u523B\u7684\u4E8B", label: "\u5370\u8C61\u6700\u6DF1" },
-        { key: "\u660E\u5929\u60F3\u6539\u8FDB\u7684\u4E8B", label: "\u660E\u5929\u6539\u8FDB" }
-      ]
-    }
-  ],
-  weekly: [
-    {
-      id: "weekly-review",
-      heading: "## \u{1F914} \u5468\u672B\u56DE\u987E\u4E0E\u603B\u7ED3",
-      kind: "text",
-      fields: [
-        { key: "\u672C\u5468\u6210\u5C31/\u4EAE\u70B9", label: "\u6210\u5C31\u4EAE\u70B9" },
-        { key: "\u672C\u5468\u5173\u952E\u9879\u76EE/\u8BA1\u5212\u8FDB\u5C55", label: "\u9879\u76EE\u8FDB\u5C55" },
-        { key: "\u672C\u5468\u9047\u5230\u7684\u6311\u6218/\u95EE\u9898", label: "\u6311\u6218\u95EE\u9898" },
-        { key: "\u4E0B\u5468\u9700\u8981\u8C03\u6574\u7684\u5730\u65B9", label: "\u9700\u8981\u8C03\u6574" },
-        { key: "\u4E0B\u5468\u5C55\u671B", label: "\u4E0B\u5468\u5C55\u671B" }
-      ]
-    }
-  ],
-  monthly: [
-    {
-      id: "monthly-review",
-      heading: "## \u{1F914} \u6708\u5EA6\u56DE\u987E\u4E0E\u603B\u7ED3",
-      kind: "text",
-      fields: [
-        { key: "\u672C\u6708\u6700\u5927\u7684\u6210\u5C31/\u4EAE\u70B9", label: "\u6210\u5C31\u4EAE\u70B9" },
-        { key: "\u672C\u6708\u5173\u952E\u9879\u76EE\u8FDB\u5C55", label: "\u9879\u76EE\u8FDB\u5C55" },
-        { key: "\u672C\u6708\u9047\u5230\u7684\u6311\u6218/\u95EE\u9898", label: "\u6311\u6218\u95EE\u9898" },
-        { key: "\u4E0B\u6708\u9700\u8981\u8C03\u6574\u7684\u5730\u65B9", label: "\u9700\u8981\u8C03\u6574" },
-        { key: "\u4E0B\u6708\u5C55\u671B", label: "\u4E0B\u6708\u5C55\u671B" }
-      ]
-    }
-  ],
-  annual: []
-};
-var DEFAULT_ACTIONS = [
+var DEFAULT_SECTIONS = [
   {
-    id: "daily-checkin",
-    nameKey: "\u6BCF\u65E5\u6253\u5361",
-    icon: "check-circle",
-    kind: "fill",
-    period: "day",
-    sectionId: "checkin"
+    id: "checkin",
+    heading: "### \u6BCF\u65E5\u6253\u5361",
+    type: "checkin",
+    fields: [
+      { key: "\u{1F48A}medicine", label: "\u5403\u836F" },
+      { key: "\u{1F9E0}flashcard", label: "\u5361\u7247\u590D\u4E60" },
+      { key: "\u{1F9D8}\u200D\u2642\uFE0Fmeditation", label: "\u51A5\u60F3" },
+      { key: "\u{1F37D}\uFE0Ffasting", label: "\u8F7B\u65AD\u98DF" }
+    ]
   },
   {
-    id: "daily-data",
-    nameKey: "\u6570\u636E\u8BB0\u5F55",
-    icon: "line-chart",
-    kind: "fill",
-    period: "day",
-    sectionId: "data"
+    id: "data",
+    heading: "### \u6570\u636E\u8BB0\u5F55",
+    type: "data",
+    fields: [
+      { key: "weight\u2696\uFE0F", label: "\u4F53\u91CD", unit: "kg" },
+      { key: "exercise\u{1F553}", label: "\u8FD0\u52A8", unit: "\u5206\u949F" },
+      { key: "reading\u{1F553}", label: "\u9605\u8BFB", unit: "\u5206\u949F" },
+      { key: "saving\u{1F4B0}", label: "\u5B58\u5165", unit: "\u5143" },
+      { key: "spent\u{1F4B0}", label: "\u652F\u51FA", unit: "\u5143" }
+    ]
   },
   {
     id: "daily-review",
-    nameKey: "\u4ECA\u65E5\u5C0F\u7ED3",
-    icon: "feather",
-    kind: "fill",
-    period: "day",
-    sectionId: "daily-review"
+    heading: "## \u270D\uFE0F \u4ECA\u65E5\u5C0F\u7ED3\u4E0E\u56DE\u987E",
+    type: "text",
+    fields: [
+      { key: "\u4ECA\u5929\u6700\u6EE1\u610F\u7684\u4E8B", label: "\u6700\u6EE1\u610F" },
+      { key: "\u4ECA\u5929\u9047\u5230\u7684\u969C\u788D\u6216\u56F0\u96BE", label: "\u969C\u788D\u56F0\u96BE" },
+      { key: "\u4ECA\u5929\u5370\u8C61\u6700\u6DF1\u523B\u7684\u4E8B", label: "\u5370\u8C61\u6700\u6DF1" },
+      { key: "\u660E\u5929\u60F3\u6539\u8FDB\u7684\u4E8B", label: "\u660E\u5929\u6539\u8FDB" }
+    ]
   },
   {
-    id: "weekly-review",
-    nameKey: "\u672C\u5468\u590D\u76D8",
-    icon: "calendar-check",
-    kind: "fill",
-    period: "week",
-    sectionId: "weekly-review"
-  },
-  {
-    id: "add-task",
-    nameKey: "\u52A0\u4E00\u6761\u4EFB\u52A1",
-    icon: "square-check",
-    kind: "append",
-    period: "day",
+    id: "gtd",
     heading: "## \u{1F440} GTD\u4EFB\u52A1\u770B\u677F",
-    lineTemplate: "- [ ] {{value}}",
-    fields: [{ key: "value", label: "\u4EFB\u52A1\u63CF\u8FF0", type: "text", required: true }]
+    type: "list",
+    fields: [],
+    lineTemplate: "- [ ] {{value}}"
   },
   {
-    id: "add-note",
-    nameKey: "\u8BB0\u4E00\u6761\u7075\u611F",
-    icon: "lightbulb",
-    kind: "append",
-    period: "day",
+    id: "ideas",
     heading: "## \u{1F4A1} \u7075\u611F\u4E0E\u601D\u8003",
-    lineTemplate: "- {{value}}",
-    fields: [{ key: "value", label: "\u5185\u5BB9", type: "text", required: true }]
+    type: "list",
+    fields: []
   }
 ];
 var DEFAULT_CONFIG = {
   language: "auto",
   dailyDir: "500 Journal/540 Daily",
-  weeklyDir: "500 Journal/530 Weekly",
-  monthlyDir: "500 Journal/520 Monthly",
-  annualDir: "500 Journal/510 Annual",
-  registry: DEFAULT_REGISTRY,
-  actions: DEFAULT_ACTIONS
+  templateNote: "",
+  sections: DEFAULT_SECTIONS
 };
 function isRecord(v) {
   return typeof v === "object" && v !== null;
+}
+var SECTION_TYPES = ["checkin", "data", "text", "list"];
+function sanitizeSection(raw, fallbackIndex) {
+  if (!isRecord(raw)) return null;
+  const id = typeof raw.id === "string" && raw.id !== "" ? raw.id : `sec-${fallbackIndex}`;
+  const heading = typeof raw.heading === "string" ? raw.heading : "";
+  const type = SECTION_TYPES.includes(raw.type) ? raw.type : null;
+  if (heading === "" || type === null) return null;
+  const fields = Array.isArray(raw.fields) ? raw.fields.filter((f) => isRecord(f) && typeof f.key === "string").map((f) => ({
+    key: String(f.key),
+    label: typeof f.label === "string" && f.label !== "" ? f.label : String(f.key),
+    ...typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}
+  })) : [];
+  const lineTemplate = typeof raw.lineTemplate === "string" ? raw.lineTemplate : void 0;
+  return { id, heading, type, fields, ...lineTemplate ? { lineTemplate } : {} };
 }
 function mergeConfig(saved) {
   const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
@@ -168,53 +108,39 @@ function mergeConfig(saved) {
   if (saved.language === "zh" || saved.language === "en" || saved.language === "auto") {
     base.language = saved.language;
   }
-  for (const key of ["dailyDir", "weeklyDir", "monthlyDir", "annualDir"]) {
-    if (typeof saved[key] === "string" && saved[key].trim() !== "") {
-      base[key] = saved[key];
-    }
+  if (typeof saved.dailyDir === "string" && saved.dailyDir.trim() !== "") {
+    base.dailyDir = saved.dailyDir;
   }
-  if (isRecord(saved.registry)) {
-    for (const scope of ["daily", "weekly", "monthly", "annual"]) {
-      const savedScope = saved.registry[scope];
-      if (Array.isArray(savedScope)) {
-        base.registry[scope] = mergeSections(savedScope, base.registry[scope]);
+  if (typeof saved.templateNote === "string") {
+    base.templateNote = saved.templateNote;
+  }
+  if (Array.isArray(saved.sections)) {
+    const sections = saved.sections.map((s, i) => sanitizeSection(s, i)).filter((s) => s !== null);
+    if (sections.length > 0) base.sections = sections;
+    return base;
+  }
+  if (isRecord(saved.registry) && Array.isArray(saved.registry.daily)) {
+    const kindMap = { bool: "checkin", number: "data", text: "text" };
+    const migrated = saved.registry.daily.map((s, i) => {
+      var _a;
+      if (!isRecord(s)) return null;
+      const type = (_a = kindMap[String(s.kind)]) != null ? _a : "text";
+      return sanitizeSection({ ...s, type }, i);
+    }).filter((s) => s !== null);
+    if (migrated.length > 0) {
+      const ids = new Set(migrated.map((s) => s.id));
+      for (const extra of DEFAULT_SECTIONS) {
+        if (extra.type === "list" && !ids.has(extra.id)) migrated.push(extra);
       }
+      base.sections = migrated;
     }
-  }
-  if (Array.isArray(saved.actions)) {
-    base.actions = saved.actions.filter(
-      (a) => isRecord(a) && typeof a.id === "string" && typeof a.nameKey === "string"
-    );
   }
   return base;
-}
-function mergeSections(saved, fallback) {
-  const out = [];
-  for (const raw of saved) {
-    if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.heading !== "string") continue;
-    if (raw.kind !== "bool" && raw.kind !== "number" && raw.kind !== "text") continue;
-    const fields = Array.isArray(raw.fields) ? raw.fields.filter(
-      (f) => isRecord(f) && typeof f.key === "string" && typeof f.label === "string"
-    ) : [];
-    out.push({ id: raw.id, heading: raw.heading, kind: raw.kind, fields });
-  }
-  if (out.length === 0) return fallback;
-  return out;
-}
-function findSection(registry, scope, sectionId) {
-  return registry[scope].find((s) => s.id === sectionId);
 }
 
 // src/i18n/en.ts
 var EN = {
-  // ── 动作名（出厂预设）──
-  "\u6BCF\u65E5\u6253\u5361": "Daily check-in",
-  "\u6570\u636E\u8BB0\u5F55": "Data log",
-  "\u4ECA\u65E5\u5C0F\u7ED3": "Daily review",
-  "\u672C\u5468\u590D\u76D8": "Weekly review",
-  "\u52A0\u4E00\u6761\u4EFB\u52A1": "Add a task",
-  "\u8BB0\u4E00\u6761\u7075\u611F": "Jot a note",
-  // ── 注册表字段标签（dynamic：t(field.label)）──
+  // ── 注册表字段标签（dynamic：field.label 直接展示，供自动识别回退与默认配置）──
   "\u5403\u836F": "Medicine",
   "\u5361\u7247\u590D\u4E60": "Flashcards",
   "\u51A5\u60F3": "Meditation",
@@ -228,19 +154,11 @@ var EN = {
   "\u969C\u788D\u56F0\u96BE": "Obstacle",
   "\u5370\u8C61\u6700\u6DF1": "Most memorable",
   "\u660E\u5929\u6539\u8FDB": "Improve tomorrow",
-  "\u6210\u5C31\u4EAE\u70B9": "Highlights",
-  "\u9879\u76EE\u8FDB\u5C55": "Progress",
-  "\u6311\u6218\u95EE\u9898": "Challenges",
-  "\u9700\u8981\u8C03\u6574": "To adjust",
-  "\u4E0B\u5468\u5C55\u671B": "Next week outlook",
-  "\u4E0B\u6708\u5C55\u671B": "Next month outlook",
   // ── 表单 ──
-  "\u4EFB\u52A1\u63CF\u8FF0": "Task description",
   "\u5185\u5BB9": "Content",
   "\u63D0\u4EA4": "Submit",
   "\u53D6\u6D88": "Cancel",
-  "\u8DF3\u8FC7\uFF08\u7559\u7A7A\u4E0D\u5199\uFF09": "Skip (empty = not written)",
-  "\u9009\u62E9\u52A8\u4F5C": "Choose an action",
+  "\u9009\u62E9\u52A8\u4F5C": "Choose a heading section",
   "\u5FEB\u901F\u5F55\u5165": "Quick capture",
   // ── 写入结果 ──
   "\u5DF2\u5199\u5165": "Written to",
@@ -248,7 +166,6 @@ var EN = {
   "\u5199\u5165\u5931\u8D25": "Write failed",
   "\u4EE5\u4E0B\u5B57\u6BB5\u5DF2\u6709\u503C\uFF0C\u8986\u76D6\u5199\u5165\uFF1F": "These fields already have values. Overwrite?",
   "\u8986\u76D6": "Overwrite",
-  "\u5B9A\u4F4D\u5931\u8D25": "Could not locate the target section",
   // ── 命令 / 视图 ──
   "\u6253\u5F00\u65E5\u5FD7\u6C47\u603B": "Open journal summary",
   "\u65E5\u5FD7\u6C47\u603B": "Journal summary",
@@ -262,28 +179,41 @@ var EN = {
   "\u4EFB\u52A1": "Tasks",
   "\u5B8C\u6210": "Done",
   "\u65B0\u5EFA": "Created",
-  "\u6253\u5361": "Check-in",
   "\u8BB0\u5F55": "recorded",
   "\u7F3A": "missing",
-  "\u590D\u76D8": "Review",
-  "\u6253\u5F00\u590D\u76D8\u7B14\u8BB0": "Open review note",
-  "\u521B\u5EFA\u590D\u76D8\u7B14\u8BB0": "Create review note",
-  "\u672C\u5468\u8FD8\u6CA1\u6709\u65E5\u5FD7\uFF0C\u5148\u53BB\u8BB0\u4E00\u6761": "No journal notes this week yet \u2014 capture something first",
   "\u6761\u65E5\u5FD7": "journal notes",
-  "\u5929\u7528 mtime \u515C\u5E95": "dated by file mtime (fallback)",
+  "\u672C\u671F\u8FD8\u6CA1\u6709\u65E5\u5FD7\uFF0C\u5148\u53BB\u8BB0\u4E00\u6761": "No journal notes in this period yet \u2014 capture something first",
   // ── 设置 ──
   "\u8BBE\u7F6E": "Settings",
   "\u754C\u9762\u8BED\u8A00": "Interface language",
   "\u8DDF\u968F Obsidian": "Follow Obsidian",
   "\u4E2D\u6587": "Chinese",
   "\u82F1\u6587": "English",
-  "\u65E5\u5FD7\u76EE\u5F55": "Journal folders",
   "\u65E5\u65E5\u5FD7\u76EE\u5F55": "Daily notes folder",
-  "\u5468\u65E5\u5FD7\u76EE\u5F55": "Weekly notes folder",
-  "\u6708\u65E5\u5FD7\u76EE\u5F55": "Monthly notes folder",
-  "\u5E74\u65E5\u5FD7\u76EE\u5F55": "Annual notes folder",
-  "\u6355\u83B7\u52A8\u4F5C\u4E0E\u5B57\u6BB5\u6CE8\u518C\u8868\u7684\u7F16\u8F91\u5668\u5728\u540E\u7EED\u7248\u672C\u63D0\u4F9B\uFF1B\u5F53\u524D\u4F7F\u7528\u51FA\u5382\u9884\u8BBE\u3002": "Editors for capture actions and the field registry ship in a later version; factory presets are used for now.",
-  "\u793A\u4F8B\uFF1A500 Journal/540 Daily": "e.g. 500 Journal/540 Daily"
+  "\u793A\u4F8B\uFF1A500 Journal/540 Daily": "e.g. 500 Journal/540 Daily",
+  "\u6A21\u677F\u7B14\u8BB0": "Template note",
+  "\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E": "Read this note and rebuild the heading sections below from its headings and inline fields.",
+  "\u793A\u4F8B\uFF1A500 Journal/TPL-Daily.md": "e.g. 500 Journal/TPL-Daily.md",
+  "\u4ECE\u6A21\u677F\u8BC6\u522B": "Detect from template",
+  "\u8BF7\u5148\u586B\u5199\u6A21\u677F\u7B14\u8BB0\u8DEF\u5F84": "Fill in the template note path first",
+  "\u627E\u4E0D\u5230\u7B14\u8BB0": "Note not found",
+  "\u672A\u8BC6\u522B\u5230\u6807\u9898\u533A": "No heading sections detected",
+  "\u8BC6\u522B\u5230": "Detected",
+  "\u4E2A\u6807\u9898\u533A": "heading sections",
+  "\u4E2A\u5B57\u6BB5": "fields",
+  "\u6807\u9898\u533A": "Heading sections",
+  "\u6DFB\u52A0\u6807\u9898\u533A": "Add heading section",
+  "\u5220\u9664": "Remove",
+  "\u884C\u6A21\u677F": "Line template",
+  "\u5B57\u6BB5\u952E": "Field key",
+  "\u5C55\u793A\u540D": "Display name",
+  "\u5355\u4F4D": "Unit",
+  "\u6DFB\u52A0\u5B57\u6BB5": "Add field",
+  "\u6253\u5361": "Check-in",
+  "\u6570\u636E": "Data",
+  "\u6587\u672C": "Text",
+  "\u5217\u8868": "List",
+  "\u547D\u4EE4\u5728\u91CD\u8F7D\u63D2\u4EF6\u540E\u6309\u65B0\u914D\u7F6E\u751F\u6548\uFF1B\u5DE5\u5177\u680F\u6309\u94AE\u4E0E\u6C47\u603B\u89C6\u56FE\u5373\u65F6\u751F\u6548\u3002": "Commands follow the new configuration after reloading the plugin; the toolbar button and the summary view apply immediately."
 };
 
 // src/i18n/translate.ts
@@ -568,13 +498,7 @@ function targetNotePath(dir, fileTemplate, now) {
 }
 
 // src/capture/skeleton.ts
-function sectionBlock(section) {
-  const lines = [section.heading, ""];
-  for (const f of section.fields) lines.push(renderFieldLine(f.key, ""));
-  lines.push("");
-  return lines;
-}
-function dailySkeleton(date, registry) {
+function dailySkeleton(date, sections) {
   const day = dateKey(date);
   const lines = [
     "---",
@@ -589,39 +513,12 @@ function dailySkeleton(date, registry) {
     `# ${day} \u65E5\u5FD7`,
     ""
   ];
-  for (const s of registry.daily) lines.push(...sectionBlock(s));
-  lines.push("## \u{1F4A1} \u7075\u611F\u4E0E\u601D\u8003", "");
+  for (const section of sections) {
+    lines.push(section.heading, "");
+    for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
+    lines.push("");
+  }
   return lines.join("\n");
-}
-function weeklySkeleton(date, registry) {
-  const { year, week } = isoWeekOf(date);
-  const key = `${year}-W${String(week).padStart(2, "0")}`;
-  const monday = dateKey(mondayOfIso(year, week));
-  const lines = [
-    "---",
-    "journal: Weekly",
-    `journal-date: ${monday}`,
-    "type: weekly_review",
-    `year: ${year}`,
-    `month: ${String(date.getMonth() + 1).padStart(2, "0")}`,
-    `week: W${String(week).padStart(2, "0")}`,
-    `created: ${dateKey(date)}`,
-    "tags:",
-    "  - journal/weekly",
-    "---",
-    "",
-    `# ${key} \u5468\u65E5\u5FD7`,
-    ""
-  ];
-  for (const s of registry.weekly) lines.push(...sectionBlock(s));
-  return lines.join("\n");
-}
-function mondayOfIso(year, week) {
-  const jan4 = new Date(year, 0, 4);
-  const jan4Day = (jan4.getDay() + 6) % 7;
-  const monday = new Date(year, 0, 4 - jan4Day);
-  monday.setDate(monday.getDate() + (week - 1) * 7);
-  return monday;
 }
 
 // src/services/file-writer.ts
@@ -656,139 +553,114 @@ var CaptureService = class {
     this.app = app;
     this.getConfig = getConfig;
   }
-  targetPath(action, now) {
-    const config = this.getConfig();
-    if (action.period === "week") {
-      return targetNotePath(config.weeklyDir, "{{week}}", now);
-    }
-    return targetNotePath(config.dailyDir, "{{date}}", now);
+  dailyPath(now) {
+    return targetNotePath(this.getConfig().dailyDir, "{{date}}", now);
   }
-  weeklyPath(now) {
-    return targetNotePath(this.getConfig().weeklyDir, "{{week}}", now);
-  }
-  async perform(action, values, opts) {
-    var _a, _b, _c, _d, _e;
-    const config = this.getConfig();
+  async performSection(section, payload, opts) {
+    var _a, _b, _c;
     const now = (_a = opts.now) != null ? _a : /* @__PURE__ */ new Date();
-    const path = this.targetPath(action, now);
-    let plan;
-    if (action.kind === "fill") {
-      const scope = action.period === "week" ? "weekly" : "daily";
-      const section = findSection(config.registry, scope, (_b = action.sectionId) != null ? _b : "");
-      if (!section) {
-        return { ok: false, reason: "error", message: `unknown section: ${action.sectionId}` };
-      }
-      const fillValues = section.fields.filter((f) => values[f.key] !== void 0 && values[f.key] !== "").map((f) => ({ key: f.key, value: values[f.key] }));
-      if (fillValues.length === 0) {
-        return { ok: false, reason: "error", message: "no values to write" };
-      }
-      let text2;
-      let created2 = false;
-      try {
-        text2 = await readNoteText(this.app, path);
-      } catch (e) {
-        const skeleton = action.period === "week" ? weeklySkeleton(now, config.registry) : dailySkeleton(now, config.registry);
-        await ensureNote(this.app, path, skeleton);
-        created2 = true;
-        text2 = skeleton;
-      }
-      plan = planFieldFill(text2.split(/\r?\n/), {
-        heading: section.heading,
-        headingMissingCreates: true,
-        values: fillValues
-      });
-      if (plan.status === "error") {
-        return { ok: false, reason: "error", message: `${plan.reason}: ${plan.heading}` };
-      }
-      const overwrites = plan.edits.filter((e) => e.previousValue !== "").map((e) => e.key);
-      if (overwrites.length > 0 && !opts.overwrite) {
-        return { ok: false, reason: "overwrite", keys: overwrites, path };
-      }
-      await applyPlanToFile(this.app, path, plan);
-      return {
-        ok: true,
-        path,
-        created: created2,
-        writtenLines: plan.edits.length + plan.creates.length
-      };
-    }
-    const line = ((_c = action.lineTemplate) != null ? _c : "- {{value}}").replaceAll("{{value}}", (_d = values.value) != null ? _d : "");
-    if (line.trim() === "-" || line.includes("{{")) {
-      return { ok: false, reason: "error", message: "empty value" };
-    }
+    const path = this.dailyPath(now);
     let text;
     let created = false;
     try {
       text = await readNoteText(this.app, path);
     } catch (e) {
-      const skeleton = dailySkeleton(now, config.registry);
-      await ensureNote(this.app, path, skeleton);
+      const skeleton = dailySkeleton(now, this.getConfig().sections);
+      const file = await ensureNote(this.app, path, skeleton);
       created = true;
-      text = skeleton;
+      text = await this.app.vault.cachedRead(file);
     }
-    plan = planAppend(text.split(/\r?\n/), {
-      heading: (_e = action.heading) != null ? _e : "",
-      headingMissingCreates: true,
-      line
-    });
+    let plan;
+    if (section.type === "list") {
+      const template = (_b = section.lineTemplate) != null ? _b : "- {{value}}";
+      const line = template.replaceAll("{{value}}", (_c = payload.lineValue) != null ? _c : "");
+      if (payload.lineValue === void 0 || payload.lineValue.trim() === "" || line.includes("{{")) {
+        return { ok: false, reason: "error", message: "empty value" };
+      }
+      plan = planAppend(text.split(/\r?\n/), {
+        heading: section.heading,
+        headingMissingCreates: true,
+        line
+      });
+    } else {
+      const fillValues = section.fields.filter((f) => payload.values[f.key] !== void 0 && payload.values[f.key] !== "").map((f) => ({ key: f.key, value: payload.values[f.key] }));
+      if (fillValues.length === 0) {
+        return { ok: false, reason: "error", message: "no values to write" };
+      }
+      plan = planFieldFill(text.split(/\r?\n/), {
+        heading: section.heading,
+        headingMissingCreates: true,
+        values: fillValues
+      });
+    }
     if (plan.status === "error") {
       return { ok: false, reason: "error", message: `${plan.reason}: ${plan.heading}` };
     }
+    const overwrites = plan.edits.filter((e) => e.previousValue !== "").map((e) => e.key);
+    if (overwrites.length > 0 && !opts.overwrite) {
+      return { ok: false, reason: "overwrite", keys: overwrites, path };
+    }
     await applyPlanToFile(this.app, path, plan);
-    return { ok: true, path, created, writtenLines: 1 };
+    return {
+      ok: true,
+      path,
+      created,
+      writtenLines: plan.edits.length + plan.creates.length
+    };
   }
 };
 
 // src/ui/capture-modal.ts
 var import_obsidian2 = require("obsidian");
 var CaptureModal = class extends import_obsidian2.Modal {
-  constructor(app, action, fields, onSubmit) {
+  constructor(app, title, type, fields, onSubmit) {
     super(app);
-    this.action = action;
+    this.title = title;
+    this.type = type;
     this.fields = fields;
     this.onSubmit = onSubmit;
     this.values = {};
+    this.lineValue = "";
     this.boolState = {};
   }
   onOpen() {
-    this.titleEl.setText(t(this.action.nameKey));
+    this.titleEl.setText(this.title);
     const form = this.contentEl.createDiv({ cls: "qj-form" });
-    for (const field of this.fields) {
+    if (this.type === "list") {
       const row = form.createDiv({ cls: "qj-field" });
-      row.createEl("label", { cls: "qj-field-label", text: t(field.label) });
-      if (field.type === "bool") {
-        this.boolState[field.key] = "";
-        const seg = row.createDiv({ cls: "qj-boolseg" });
-        const options = [
-          { id: "yes", label: BOOL_YES, cls: "qj-bool-yes" },
-          { id: "no", label: BOOL_NO, cls: "qj-bool-no" },
-          { id: "", label: t("\u8DF3\u8FC7\uFF08\u7559\u7A7A\u4E0D\u5199\uFF09"), cls: "qj-bool-skip" }
-        ];
-        for (const opt of options) {
-          const btn = seg.createEl("button", {
-            cls: `qj-boolseg-btn ${opt.cls}`,
-            text: opt.label
-          });
-          btn.type = "button";
-          btn.onclick = () => {
-            this.boolState[field.key] = opt.id;
-            seg.querySelectorAll(".qj-boolseg-btn").forEach((b) => b.removeClass("is-active"));
-            btn.addClass("is-active");
-          };
+      row.createEl("label", { cls: "qj-field-label", text: t("\u5185\u5BB9") });
+      const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
+      input.rows = 2;
+      input.onchange = () => this.lineValue = input.value;
+    } else {
+      for (const field of this.fields) {
+        const row = form.createDiv({ cls: "qj-field" });
+        row.createEl("label", { cls: "qj-field-label", text: field.label });
+        if (this.type === "checkin") {
+          this.boolState[field.key] = "";
+          const seg = row.createDiv({ cls: "qj-boolseg" });
+          for (const opt of [
+            { id: "yes", label: BOOL_YES },
+            { id: "no", label: BOOL_NO }
+          ]) {
+            const btn = seg.createEl("button", {
+              cls: "qj-boolseg-btn",
+              text: opt.label
+            });
+            btn.type = "button";
+            btn.onclick = () => {
+              this.boolState[field.key] = this.boolState[field.key] === opt.id ? "" : opt.id;
+              btn.toggleClass("is-active", this.boolState[field.key] === opt.id);
+            };
+          }
+        } else if (this.type === "data") {
+          const input = row.createEl("input", { cls: "qj-input", type: "number" });
+          input.inputMode = "decimal";
+          input.onchange = () => this.values[field.key] = input.value;
+        } else {
+          const input = row.createEl("input", { cls: "qj-input", type: "text" });
+          input.onchange = () => this.values[field.key] = input.value;
         }
-      } else if (field.type === "number") {
-        const input = row.createEl("input", { cls: "qj-input", type: "number" });
-        input.inputMode = "decimal";
-        input.placeholder = t("\u8DF3\u8FC7\uFF08\u7559\u7A7A\u4E0D\u5199\uFF09");
-        input.onchange = () => this.values[field.key] = input.value;
-      } else if (field.type === "multiline") {
-        const input = row.createEl("textarea", { cls: "qj-input qj-textarea" });
-        input.placeholder = t("\u8DF3\u8FC7\uFF08\u7559\u7A7A\u4E0D\u5199\uFF09");
-        input.onchange = () => this.values[field.key] = input.value;
-      } else {
-        const input = row.createEl("input", { cls: "qj-input", type: "text" });
-        input.placeholder = t("\u8DF3\u8FC7\uFF08\u7559\u7A7A\u4E0D\u5199\uFF09");
-        input.onchange = () => this.values[field.key] = input.value;
       }
     }
     const footer = form.createDiv({ cls: "qj-form-footer" });
@@ -800,16 +672,16 @@ var CaptureModal = class extends import_obsidian2.Modal {
       text: t("\u63D0\u4EA4")
     });
     submit.type = "button";
+    (0, import_obsidian2.setIcon)(submit.createSpan({ cls: "qj-btn-icon" }), "check");
     submit.onclick = () => {
       for (const [key, state] of Object.entries(this.boolState)) {
         if (state === "yes") this.values[key] = BOOL_YES;
         else if (state === "no") this.values[key] = BOOL_NO;
         else delete this.values[key];
       }
-      this.onSubmit({ ...this.values });
+      this.onSubmit({ values: { ...this.values }, lineValue: this.lineValue });
       this.close();
     };
-    (0, import_obsidian2.setIcon)(submit.createSpan({ cls: "qj-btn-icon" }), "check");
   }
 };
 
@@ -843,29 +715,35 @@ var ConfirmModal = class extends import_obsidian3.Modal {
 
 // src/ui/action-picker-modal.ts
 var import_obsidian4 = require("obsidian");
+var TYPE_ICON = {
+  checkin: "circle-check",
+  data: "line-chart",
+  text: "feather",
+  list: "list-plus"
+};
 var ActionPickerModal = class extends import_obsidian4.Modal {
-  constructor(app, actions, onPick) {
+  constructor(app, sections, onPick) {
     super(app);
-    this.actions = actions;
+    this.sections = sections;
     this.onPick = onPick;
   }
   onOpen() {
     this.titleEl.setText(t("\u9009\u62E9\u52A8\u4F5C"));
     const list = this.contentEl.createDiv({ cls: "qj-action-list" });
-    for (const action of this.actions) {
+    for (const section of this.sections) {
       const row = list.createDiv({ cls: "qj-action-row" });
-      (0, import_obsidian4.setIcon)(row.createSpan({ cls: "qj-action-icon" }), action.icon);
-      row.createSpan({ cls: "qj-action-name", text: t(action.nameKey) });
+      (0, import_obsidian4.setIcon)(row.createSpan({ cls: "qj-action-icon" }), TYPE_ICON[section.type]);
+      row.createSpan({ cls: "qj-action-name", text: section.heading.replace(/^#+\s*/, "") });
       row.onclick = () => {
         this.close();
-        this.onPick(action);
+        this.onPick(section);
       };
     }
   }
 };
 
 // src/views/summary-view.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/parse/task-lines.ts
 var TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
@@ -891,8 +769,8 @@ function parseTaskLines(lines) {
 }
 
 // src/metrics/aggregate.ts
-function boolStats(section, days, records) {
-  return section.fields.map((f) => {
+function boolStats(fields, days, records) {
+  return fields.map((f) => {
     let yes = 0;
     let no = 0;
     let missingDays = 0;
@@ -912,8 +790,8 @@ function boolStats(section, days, records) {
     return { key: f.key, label: f.label, yes, no, missingDays };
   });
 }
-function numberStats(section, days, records) {
-  return section.fields.map((f) => {
+function numberStats(fields, days, records) {
+  return fields.map((f) => {
     var _a;
     const samples = [];
     for (const day of days) {
@@ -962,12 +840,10 @@ function taskStats(days, records) {
 }
 
 // src/services/vault-index.ts
-var import_obsidian5 = require("obsidian");
 var VaultIndex = class {
-  constructor(app, dailyDir, weeklyDir) {
+  constructor(app, dailyDir) {
     this.app = app;
     this.dailyDir = dailyDir;
-    this.weeklyDir = weeklyDir;
   }
   filesUnder(dir) {
     const prefix = dir.replace(/\/+$/, "") + "/";
@@ -997,12 +873,6 @@ var VaultIndex = class {
     }
     return { records, mtimeFallback };
   }
-  /** 周复盘笔记文件（按文件名 YYYY-Www 找）。 */
-  weeklyFile(weekKey2) {
-    const target = `${this.weeklyDir.replace(/\/+$/, "")}/${weekKey2}.md`;
-    const file = this.app.vault.getAbstractFileByPath(target);
-    return file instanceof import_obsidian5.TFile ? file : null;
-  }
   resolveDate(file) {
     var _a;
     const cache = this.app.metadataCache.getFileCache(file);
@@ -1021,7 +891,7 @@ var KIND_LABEL = {
   month: "\u6708",
   year: "\u5E74"
 };
-var SummaryView = class extends import_obsidian6.ItemView {
+var SummaryView = class extends import_obsidian5.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1089,21 +959,20 @@ var SummaryView = class extends import_obsidian6.ItemView {
     };
     const refresh = nav.createEl("button", { cls: "qj-btn qj-icon-btn" });
     refresh.type = "button";
-    (0, import_obsidian6.setIcon)(refresh, "refresh-cw");
+    (0, import_obsidian5.setIcon)(refresh, "refresh-cw");
     refresh.onclick = () => void this.render();
   }
   async renderBody(body) {
     const config = this.plugin.config;
-    const index = new VaultIndex(this.app, config.dailyDir, config.weeklyDir);
+    const index = new VaultIndex(this.app, config.dailyDir);
     const days = this.period.days.map(dateKey);
     const { records } = await index.collectDayRecords(this.period.days);
-    const header = body.createDiv({ cls: "qj-period-header" });
-    header.createSpan({
+    body.createDiv({ cls: "qj-period-header" }).createSpan({
       cls: "qj-period-count",
       text: `${records.size} ${t("\u6761\u65E5\u5FD7")}`
     });
     if (records.size === 0) {
-      body.createDiv({ cls: "qj-empty", text: t("\u672C\u5468\u8FD8\u6CA1\u6709\u65E5\u5FD7\uFF0C\u5148\u53BB\u8BB0\u4E00\u6761") });
+      body.createDiv({ cls: "qj-empty", text: t("\u672C\u671F\u8FD8\u6CA1\u6709\u65E5\u5FD7\uFF0C\u5148\u53BB\u8BB0\u4E00\u6761") });
       return;
     }
     const cards = body.createDiv({ cls: "qj-cards" });
@@ -1113,69 +982,38 @@ var SummaryView = class extends import_obsidian6.ItemView {
       { label: t("\u65B0\u5EFA"), value: String(tasks.createdInPeriod) },
       { label: t("\u8BB0\u5F55"), value: `${tasks.done}/${tasks.total}` }
     ]);
-    for (const section of config.registry.daily) {
-      if (section.kind === "bool") {
-        const stats = boolStats(section, days, records);
-        const card = this.cardShell(cards, t("\u6253\u5361"));
+    for (const section of config.sections) {
+      if (section.type === "checkin") {
+        const stats = boolStats(section.fields, days, records);
+        const card = this.cardShell(cards, section.heading.replace(/^#+\s*/, ""));
         for (const s of stats) {
           const row = card.createDiv({ cls: "qj-checkin-row" });
-          row.createSpan({ cls: "qj-checkin-label", text: t(s.label) });
+          row.createSpan({ cls: "qj-checkin-label", text: s.label });
           const bar = row.createDiv({ cls: "qj-bar" });
           const recorded = s.yes + s.no;
           if (recorded > 0) {
-            bar.createSpan({
-              cls: "qj-bar-yes",
-              attr: { style: `flex-grow:${s.yes}` }
-            });
-            bar.createSpan({
-              cls: "qj-bar-no",
-              attr: { style: `flex-grow:${s.no}` }
-            });
+            bar.createSpan({ cls: "qj-bar-yes", attr: { style: `flex-grow:${s.yes}` } });
+            bar.createSpan({ cls: "qj-bar-no", attr: { style: `flex-grow:${s.no}` } });
           }
           row.createSpan({
             cls: "qj-checkin-count",
             text: recorded > 0 ? `${s.yes} / ${recorded} ${t("\u8BB0\u5F55")} \xB7 ${t("\u7F3A")} ${s.missingDays}` : `${t("\u7F3A")} ${s.missingDays}`
           });
         }
-      } else if (section.kind === "number") {
-        const stats = numberStats(section, days, records);
-        const card = this.cardShell(cards, t("\u6570\u636E\u8BB0\u5F55"));
+      } else if (section.type === "data") {
+        const stats = numberStats(section.fields, days, records);
+        const card = this.cardShell(cards, section.heading.replace(/^#+\s*/, ""));
         for (const s of stats) {
           const row = card.createDiv({ cls: "qj-data-row" });
-          row.createSpan({ cls: "qj-checkin-label", text: t(s.label) });
+          row.createSpan({ cls: "qj-checkin-label", text: s.label });
           const unit = s.unit ? ` ${s.unit}` : "";
           row.createSpan({
             cls: "qj-data-value",
             text: s.count > 0 ? `\u5747\u503C ${s.mean.toFixed(1)}${unit}\uFF08${s.min}~${s.max}\uFF09` : "\u2014"
           });
         }
-      } else {
-        const card = this.cardShell(cards, t("\u4ECA\u65E5\u5C0F\u7ED3"));
-        card.createDiv({
-          cls: "qj-muted",
-          text: `${section.fields.length} \xD7 ${t("\u8BB0\u5F55")}`
-        });
       }
     }
-    if (this.kind === "week") {
-      const card = this.cardShell(cards, t("\u590D\u76D8"));
-      const weekly = index.weeklyFile(weekKey(this.weekStartOfCurrentView()));
-      const btn = card.createEl("button", {
-        cls: "qj-btn",
-        text: weekly ? t("\u6253\u5F00\u590D\u76D8\u7B14\u8BB0") : t("\u521B\u5EFA\u590D\u76D8\u7B14\u8BB0")
-      });
-      btn.type = "button";
-      btn.onclick = async () => {
-        let file = weekly;
-        if (!file) {
-          file = await this.plugin.ensureWeeklyReview(this.period.start);
-        }
-        if (file) await this.app.workspace.getLeaf(false).openFile(file);
-      };
-    }
-  }
-  weekStartOfCurrentView() {
-    return this.kind === "week" ? this.period.start : /* @__PURE__ */ new Date();
   }
   cardShell(cards, title) {
     const card = cards.createDiv({ cls: "qj-card" });
@@ -1194,15 +1032,84 @@ var SummaryView = class extends import_obsidian6.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian7 = require("obsidian");
-var QJSettingTab = class extends import_obsidian7.PluginSettingTab {
+var import_obsidian6 = require("obsidian");
+
+// src/parse/detect-sections.ts
+var HEADING_RE = /^#{1,6}\s/;
+var FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
+function detectSections(text) {
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let inFence = false;
+  let inFrontmatter = false;
+  let current = null;
+  lines.forEach((line) => {
+    if (line.trim() === "---" && !inFence && (out.length === 0 && !current || inFrontmatter)) {
+      if (!inFrontmatter && lines.indexOf(line) === 0) {
+        inFrontmatter = true;
+      } else if (inFrontmatter) {
+        inFrontmatter = false;
+      }
+      return;
+    }
+    if (line.trimStart().startsWith("```")) {
+      inFence = !inFence;
+      return;
+    }
+    if (inFence || inFrontmatter) return;
+    if (HEADING_RE.test(line)) {
+      current = { heading: line.trim(), fieldKeys: [] };
+      out.push(current);
+      return;
+    }
+    if (!current) return;
+    const m = FIELD_RE.exec(line);
+    if (m) {
+      const key = m[1].trim();
+      if (key !== "" && !current.fieldKeys.includes(key)) current.fieldKeys.push(key);
+    }
+  });
+  return out;
+}
+function suggestType(heading, fieldCount) {
+  if (fieldCount === 0) return "list";
+  if (/打卡/.test(heading)) return "checkin";
+  if (/数据|记录/.test(heading)) return "data";
+  return "text";
+}
+var EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu;
+function defaultLabel(key) {
+  const cleaned = key.replace(EMOJI_RE, "").replace(/‍/g, "").replace(/️/g, "").trim();
+  return cleaned !== "" ? cleaned : key;
+}
+function detectedToSections(detected) {
+  return detected.map((d, i) => {
+    const type = suggestType(d.heading, d.fieldKeys.length);
+    return {
+      id: `sec-${i + 1}`,
+      heading: d.heading,
+      type,
+      fields: d.fieldKeys.map((key) => ({ key, label: defaultLabel(key) })),
+      ...type === "list" ? { lineTemplate: "- {{value}}" } : {}
+    };
+  });
+}
+
+// src/settings.ts
+var TYPE_LABEL = {
+  checkin: "\u6253\u5361",
+  data: "\u6570\u636E",
+  text: "\u6587\u672C",
+  list: "\u5217\u8868"
+};
+var QJSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
   display() {
     this.containerEl.empty();
-    new import_obsidian7.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
+    new import_obsidian6.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
       drop.addOption("zh", t("\u4E2D\u6587"));
       drop.addOption("en", t("\u82F1\u6587"));
@@ -1220,30 +1127,155 @@ var QJSettingTab = class extends import_obsidian7.PluginSettingTab {
         this.display();
       });
     });
-    new import_obsidian7.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u76EE\u5F55")).setHeading();
-    this.dirSetting(t("\u65E5\u65E5\u5FD7\u76EE\u5F55"), "dailyDir");
-    this.dirSetting(t("\u5468\u65E5\u5FD7\u76EE\u5F55"), "weeklyDir");
-    this.dirSetting(t("\u6708\u65E5\u5FD7\u76EE\u5F55"), "monthlyDir");
-    this.dirSetting(t("\u5E74\u65E5\u5FD7\u76EE\u5F55"), "annualDir");
-    this.containerEl.createEl("p", {
-      cls: "qj-setting-note",
-      text: t("\u6355\u83B7\u52A8\u4F5C\u4E0E\u5B57\u6BB5\u6CE8\u518C\u8868\u7684\u7F16\u8F91\u5668\u5728\u540E\u7EED\u7248\u672C\u63D0\u4F9B\uFF1B\u5F53\u524D\u4F7F\u7528\u51FA\u5382\u9884\u8BBE\u3002")
-    });
-  }
-  dirSetting(name, key) {
-    new import_obsidian7.Setting(this.containerEl).setName(name).addText((text) => {
+    new import_obsidian6.Setting(this.containerEl).setName(t("\u65E5\u65E5\u5FD7\u76EE\u5F55")).addText((text) => {
       text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/540 Daily"));
-      text.setValue(this.plugin.config[key]);
+      text.setValue(this.plugin.config.dailyDir);
       text.onChange(async (value) => {
-        this.plugin.config[key] = value.trim();
+        this.plugin.config.dailyDir = value.trim();
         await this.plugin.saveConfig();
       });
     });
+    new import_obsidian6.Setting(this.containerEl).setName(t("\u6A21\u677F\u7B14\u8BB0")).setDesc(t("\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E")).addText((text) => {
+      text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/TPL-Daily.md"));
+      text.setValue(this.plugin.config.templateNote);
+      text.onChange(async (value) => {
+        this.plugin.config.templateNote = value.trim();
+        await this.plugin.saveConfig();
+      });
+    }).addButton(
+      (btn) => btn.setButtonText(t("\u4ECE\u6A21\u677F\u8BC6\u522B")).setCta().onClick(() => void this.detectFromTemplate())
+    );
+    new import_obsidian6.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
+    for (const section of this.plugin.config.sections) {
+      this.sectionEditor(section);
+    }
+    new import_obsidian6.Setting(this.containerEl).addButton(
+      (btn) => btn.setButtonText(t("\u6DFB\u52A0\u6807\u9898\u533A")).onClick(async () => {
+        this.plugin.config.sections.push({
+          id: `sec-${Date.now()}`,
+          heading: "## ",
+          type: "list",
+          fields: []
+        });
+        await this.plugin.saveConfig();
+        this.display();
+      })
+    );
+    this.containerEl.createEl("p", {
+      cls: "qj-setting-note",
+      text: t("\u547D\u4EE4\u5728\u91CD\u8F7D\u63D2\u4EF6\u540E\u6309\u65B0\u914D\u7F6E\u751F\u6548\uFF1B\u5DE5\u5177\u680F\u6309\u94AE\u4E0E\u6C47\u603B\u89C6\u56FE\u5373\u65F6\u751F\u6548\u3002")
+    });
+  }
+  async detectFromTemplate() {
+    const path = (0, import_obsidian6.normalizePath)(this.plugin.config.templateNote);
+    if (path === "") {
+      new import_obsidian6.Notice(t("\u8BF7\u5148\u586B\u5199\u6A21\u677F\u7B14\u8BB0\u8DEF\u5F84"));
+      return;
+    }
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian6.TFile)) {
+      new import_obsidian6.Notice(`${t("\u627E\u4E0D\u5230\u7B14\u8BB0")}\uFF1A${path}`);
+      return;
+    }
+    const text = await this.app.vault.cachedRead(file);
+    const sections = detectedToSections(detectSections(text));
+    if (sections.length === 0) {
+      new import_obsidian6.Notice(t("\u672A\u8BC6\u522B\u5230\u6807\u9898\u533A"));
+      return;
+    }
+    this.plugin.config.sections = sections;
+    await this.plugin.saveConfig();
+    const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0);
+    new import_obsidian6.Notice(`${t("\u8BC6\u522B\u5230")} ${sections.length} ${t("\u4E2A\u6807\u9898\u533A")}\u3001${fieldCount} ${t("\u4E2A\u5B57\u6BB5")}`);
+    this.display();
+  }
+  sectionEditor(section) {
+    const container = this.containerEl.createDiv({ cls: "qj-section-editor" });
+    new import_obsidian6.Setting(container).addText((text) => {
+      text.setPlaceholder("### \u2026");
+      text.setValue(section.heading);
+      text.onChange(async (value) => {
+        section.heading = value;
+        await this.plugin.saveConfig();
+      });
+    }).addDropdown((drop) => {
+      for (const type of ["checkin", "data", "text", "list"]) {
+        drop.addOption(type, t(TYPE_LABEL[type]));
+      }
+      drop.setValue(section.type);
+      drop.onChange(async (value) => {
+        section.type = value;
+        await this.plugin.saveConfig();
+        this.display();
+      });
+    }).addExtraButton(
+      (btn) => btn.setIcon("trash-2").setTooltip(t("\u5220\u9664")).onClick(async () => {
+        const sections = this.plugin.config.sections;
+        sections.splice(sections.indexOf(section), 1);
+        await this.plugin.saveConfig();
+        this.display();
+      })
+    );
+    if (section.type === "list") {
+      new import_obsidian6.Setting(container).setName(t("\u884C\u6A21\u677F")).setDesc("{{value}}").addText((text) => {
+        var _a;
+        text.setValue((_a = section.lineTemplate) != null ? _a : "- {{value}}");
+        text.onChange(async (value) => {
+          section.lineTemplate = value;
+          await this.plugin.saveConfig();
+        });
+      });
+      return;
+    }
+    for (const field of section.fields) {
+      const row = new import_obsidian6.Setting(container).setClass("qj-field-editor");
+      row.addText((text) => {
+        text.setPlaceholder(t("\u5B57\u6BB5\u952E"));
+        text.setValue(field.key);
+        text.onChange(async (value) => {
+          field.key = value;
+          await this.plugin.saveConfig();
+        });
+      });
+      row.addText((text) => {
+        text.setPlaceholder(t("\u5C55\u793A\u540D"));
+        text.setValue(field.label);
+        text.onChange(async (value) => {
+          field.label = value;
+          await this.plugin.saveConfig();
+        });
+      });
+      if (section.type === "data") {
+        row.addText((text) => {
+          var _a;
+          text.setPlaceholder(t("\u5355\u4F4D"));
+          text.setValue((_a = field.unit) != null ? _a : "");
+          text.onChange(async (value) => {
+            field.unit = value;
+            await this.plugin.saveConfig();
+          });
+        });
+      }
+      row.addExtraButton(
+        (btn) => btn.setIcon("x").setTooltip(t("\u5220\u9664")).onClick(async () => {
+          section.fields.splice(section.fields.indexOf(field), 1);
+          await this.plugin.saveConfig();
+          this.display();
+        })
+      );
+    }
+    new import_obsidian6.Setting(container).addButton(
+      (btn) => btn.setButtonText(t("\u6DFB\u52A0\u5B57\u6BB5")).onClick(async () => {
+        section.fields.push({ key: "", label: "" });
+        await this.plugin.saveConfig();
+        this.display();
+      })
+    );
   }
 };
 
 // src/main.ts
-var QuickJournalPlugin = class extends import_obsidian8.Plugin {
+var QuickJournalPlugin = class extends import_obsidian7.Plugin {
   /** obsidian.d.ts 1.8.7 未声明 App.locale（运行时存在），收口在这一个转换里 */
   localeOf(app) {
     return app == null ? void 0 : app.locale;
@@ -1258,51 +1290,42 @@ var QuickJournalPlugin = class extends import_obsidian8.Plugin {
       name: t("\u6253\u5F00\u65E5\u5FD7\u6C47\u603B"),
       callback: () => void this.activateSummary()
     });
-    for (const action of this.config.actions) {
-      this.addCommand({
-        id: `capture-${action.id}`,
-        name: t(action.nameKey),
-        callback: () => this.openCapture(action)
-      });
+    for (const section of this.config.sections) {
+      this.addSectionCommand(section);
     }
     this.addRibbonIcon("notebook-pen", t("\u5FEB\u901F\u5F55\u5165"), () => {
-      new ActionPickerModal(this.app, this.config.actions, (action) => this.openCapture(action)).open();
+      new ActionPickerModal(
+        this.app,
+        this.config.sections,
+        (section) => this.openSectionCapture(section)
+      ).open();
     });
     this.addSettingTab(new QJSettingTab(this.app, this));
   }
   async saveConfig() {
     await this.saveData(this.config);
   }
-  /** 表单字段来源：fill 动作取注册表 section，append 动作用自带字段。 */
-  resolveFields(action) {
-    var _a, _b;
-    if (action.kind === "fill") {
-      const scope = action.period === "week" ? "weekly" : "daily";
-      const section = findSection(this.config.registry, scope, (_a = action.sectionId) != null ? _a : "");
-      if (!section) return [];
-      return section.fields.map((f) => ({
-        key: f.key,
-        label: f.label,
-        type: section.kind
-      }));
-    }
-    return (_b = action.fields) != null ? _b : [];
+  addSectionCommand(section) {
+    this.addCommand({
+      id: `qj-${section.id}`,
+      name: `${t("\u5FEB\u901F\u5F55\u5165")}: ${section.heading.replace(/^#+\s*/, "")}`,
+      callback: () => this.openSectionCapture(section)
+    });
   }
-  openCapture(action) {
-    const fields = this.resolveFields(action);
-    if (fields.length === 0) {
-      new import_obsidian8.Notice(`${t("\u5B9A\u4F4D\u5931\u8D25")}: ${action.id}`);
-      return;
-    }
-    new CaptureModal(this.app, action, fields, (values) => {
-      void this.performCapture(action, values, false);
-    }).open();
+  openSectionCapture(section) {
+    new CaptureModal(
+      this.app,
+      section.heading.replace(/^#+\s*/, ""),
+      section.type,
+      section.fields,
+      (payload) => void this.performCapture(section, payload, false)
+    ).open();
   }
-  async performCapture(action, values, overwrite) {
-    const result = await this.capture.perform(action, values, { overwrite });
+  async performCapture(section, payload, overwrite) {
+    const result = await this.capture.performSection(section, payload, { overwrite });
     if (result.ok) {
       const note = result.created ? `${t("\u521B\u5EFA\u7B14\u8BB0")} \xB7 ` : "";
-      new import_obsidian8.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);
+      new import_obsidian7.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);
       return;
     }
     if (result.reason === "overwrite") {
@@ -1310,23 +1333,11 @@ var QuickJournalPlugin = class extends import_obsidian8.Plugin {
         this.app,
         t("\u4EE5\u4E0B\u5B57\u6BB5\u5DF2\u6709\u503C\uFF0C\u8986\u76D6\u5199\u5165\uFF1F"),
         result.keys.join("\n"),
-        () => void this.performCapture(action, values, true)
+        () => void this.performCapture(section, payload, true)
       ).open();
       return;
     }
-    new import_obsidian8.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
-  }
-  /** 确保本周复盘笔记存在（骨架），返回文件。 */
-  async ensureWeeklyReview(date) {
-    const path = this.capture.weeklyPath(date);
-    try {
-      await readNoteText(this.app, path);
-      const file = this.app.vault.getAbstractFileByPath(path);
-      return file instanceof import_obsidian8.TFile ? file : null;
-    } catch (e) {
-      const skeleton = weeklySkeleton(date, this.config.registry);
-      return ensureNote(this.app, path, skeleton);
-    }
+    new import_obsidian7.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
   }
   async activateSummary() {
     const { workspace } = this.app;
