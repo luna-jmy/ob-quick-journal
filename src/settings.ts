@@ -151,6 +151,7 @@ export class QJSettingTab extends PluginSettingTab {
 		const journal = this.plugin.config.journals[this.journalTab];
 		new Setting(this.containerEl)
 			.setName(t("日志目录"))
+			.setDesc(t("含子目录，递归识别"))
 			.addText((text) => {
 				text.setPlaceholder(t("示例：500 Journal/540 Daily"));
 				text.setValue(journal.dir);
@@ -160,25 +161,38 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			});
 
-		if (this.journalTab === "daily") {
-			new Setting(this.containerEl)
-				.setName(t("模板笔记"))
-				.setDesc(t("从模板识别说明"))
-				.addText((text) => {
-					text.setPlaceholder(t("示例：500 Journal/TPL-Daily.md"));
-					text.setValue(this.plugin.config.templateNote);
-					text.onChange(async (value) => {
-						this.plugin.config.templateNote = value.trim();
+		new Setting(this.containerEl)
+			.setName(t("文件名格式"))
+			.setDesc(t("文件名格式说明"))
+			.addText((text) => {
+				text.setPlaceholder(t("示例：YYYY-MM-DD"));
+				text.setValue(journal.filenameFormat);
+				text.onChange(async (value) => {
+					if (value.trim() !== "") {
+						journal.filenameFormat = value.trim();
 						await this.plugin.saveConfig();
-					});
-				})
-				.addButton((btn) =>
-					btn
-						.setButtonText(t("从模板识别"))
-						.setCta()
-						.onClick(() => void this.detectFromTemplate()),
-				);
-		}
+					}
+				});
+			});
+		this.appendMomentLink();
+
+		new Setting(this.containerEl)
+			.setName(t("模板笔记"))
+			.setDesc(t("从模板识别说明"))
+			.addText((text) => {
+				text.setPlaceholder(t("示例：500 Journal/TPL-Daily.md"));
+				text.setValue(journal.templateNote);
+				text.onChange(async (value) => {
+					journal.templateNote = value.trim();
+					await this.plugin.saveConfig();
+				});
+			})
+			.addButton((btn) =>
+				btn
+					.setButtonText(t("从模板识别"))
+					.setCta()
+					.onClick(() => void this.detectFromTemplate()),
+			);
 
 		new Setting(this.containerEl).setName(t("标题区")).setHeading();
 		for (const section of journal.sections) {
@@ -200,8 +214,21 @@ export class QJSettingTab extends PluginSettingTab {
 		);
 	}
 
+	/** 在文件名格式下方追加 moment 文档链接（可点击）。 */
+	private appendMomentLink(): void {
+		const host = this.containerEl.lastElementChild;
+		if (host === null) return;
+		const desc = (host as HTMLElement).querySelector(".setting-item-description");
+		if (desc === null) return;
+		desc.createEl("a", {
+			text: "Moment format",
+			attr: { href: "https://momentjs.com/docs/#/displaying/format/" },
+		});
+	}
+
 	private async detectFromTemplate(): Promise<void> {
-		const path = normalizePath(this.plugin.config.templateNote);
+		const journal = this.plugin.config.journals[this.journalTab];
+		const path = normalizePath(journal.templateNote);
 		if (path === "") {
 			new Notice(t("请先填写模板笔记路径"));
 			return;
@@ -217,7 +244,7 @@ export class QJSettingTab extends PluginSettingTab {
 			new Notice(t("未识别到标题区"));
 			return;
 		}
-		this.plugin.config.journals.daily.sections = sections;
+		journal.sections = sections;
 		await this.plugin.saveConfig();
 		const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0);
 		new Notice(`${t("识别到")} ${sections.length} ${t("个标题区")}、${fieldCount} ${t("个字段")}`);

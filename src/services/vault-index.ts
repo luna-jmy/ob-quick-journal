@@ -74,12 +74,31 @@ export class VaultIndex {
 		return entries;
 	}
 
-	/** 按日期键打开日志笔记。 */
+	/** 按日期键找日志笔记（递归子目录；frontmatter journal-date 或文件名匹配）。 */
 	dailyFile(dateStr: string): TFile | null {
-		const file = this.app.vault.getAbstractFileByPath(
-			`${this.dailyDir.replace(/\/+$/, "")}/${dateStr}.md`,
-		);
-		return file instanceof TFile ? file : null;
+		for (const file of this.filesUnder(this.dailyDir)) {
+			if (this.resolveDate(file) === dateStr) return file;
+		}
+		return null;
+	}
+
+	/** 按期间键找对应类型笔记（递归子目录；文件名匹配 key）。周/月/年用。 */
+	fileByKey(key: string): TFile | null {
+		const wanted = `${key}.md`;
+		for (const file of this.filesUnder(this.dailyDir)) {
+			if (file.name.toLowerCase() === wanted.toLowerCase()) return file;
+		}
+		return null;
+	}
+
+	/** 目录下全部日志笔记（递归），带归属日期（daily 优先级同 resolveDate）。 */
+	dailyEntries(): { date: string; file: TFile }[] {
+		const out: { date: string; file: TFile }[] = [];
+		for (const file of this.filesUnder(this.dailyDir)) {
+			const date = this.resolveDate(file);
+			if (date) out.push({ date, file });
+		}
+		return out.sort((a, b) => (a.date < b.date ? 1 : -1));
 	}
 
 	private resolveDate(file: TFile): string | null {

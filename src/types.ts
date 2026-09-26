@@ -38,12 +38,18 @@ export interface JournalSection {
 }
 
 export interface JournalConfig {
-	/** 该类型日志的目录 */
+	/** 该类型日志的目录（含子目录，递归识别） */
 	dir: string;
+	/** 「从模板识别」读取的笔记路径 */
+	templateNote: string;
+	/** 目标笔记文件名格式（moment 语法子集：YYYY YY MM M DD D ww w 与 [字面量]） */
+	filenameFormat: string;
 	sections: JournalSection[];
 }
 
 export interface CustomQuery {
+	/** 用户起的名字（查询块标题栏） */
+	title?: string;
 	kind: QueryKind;
 	code: string;
 }
@@ -52,8 +58,6 @@ export type ViewLocation = "tab" | "sidebar";
 
 export interface QJConfig {
 	language: "auto" | "zh" | "en";
-	/** 「从模板识别」读取的笔记路径（作用于 daily 的标题区） */
-	templateNote: string;
 	journals: Record<PeriodType, JournalConfig>;
 	/** 汇总视图的组件顺序（编辑模式拖拽调整；缺省补齐、未知项剔除） */
 	summaryLayout: string[];
@@ -125,9 +129,16 @@ export const DEFAULT_DAILY_SECTIONS: JournalSection[] = [
 ];
 
 export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
-	daily: { dir: "500 Journal/540 Daily", sections: DEFAULT_DAILY_SECTIONS },
+	daily: {
+		dir: "500 Journal/540 Daily",
+		templateNote: "",
+		filenameFormat: "YYYY-MM-DD",
+		sections: DEFAULT_DAILY_SECTIONS,
+	},
 	weekly: {
 		dir: "500 Journal/530 Weekly",
+		templateNote: "",
+		filenameFormat: "YYYY-[W]ww",
 		sections: [
 			{
 				id: "weekly-review",
@@ -145,6 +156,8 @@ export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
 	},
 	monthly: {
 		dir: "500 Journal/520 Monthly",
+		templateNote: "",
+		filenameFormat: "YYYY-MM",
 		sections: [
 			{
 				id: "monthly-review",
@@ -160,7 +173,12 @@ export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
 			},
 		],
 	},
-	annual: { dir: "500 Journal/510 Annual", sections: [] },
+	annual: {
+		dir: "500 Journal/510 Annual",
+		templateNote: "",
+		filenameFormat: "YYYY",
+		sections: [],
+	},
 };
 
 /** 汇总视图的组件 id（顺序即默认布局；快速录入固定为顶端整行条，不在此列）。 */
@@ -177,7 +195,6 @@ export const DEFAULT_SUMMARY_LAYOUT = [
 
 export const DEFAULT_CONFIG: QJConfig = {
 	language: "auto",
-	templateNote: "",
 	journals: DEFAULT_JOURNALS,
 	summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
 	summaryQueries: [],
@@ -223,6 +240,12 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 function sanitizeJournal(raw: unknown, fallback: JournalConfig): JournalConfig {
 	if (!isRecord(raw)) return fallback;
 	const dir = typeof raw.dir === "string" && raw.dir.trim() !== "" ? raw.dir : fallback.dir;
+	const templateNote =
+		typeof raw.templateNote === "string" ? raw.templateNote : fallback.templateNote;
+	const filenameFormat =
+		typeof raw.filenameFormat === "string" && raw.filenameFormat.trim() !== ""
+			? raw.filenameFormat
+			: fallback.filenameFormat;
 	let sections: JournalSection[];
 	if (Array.isArray(raw.sections)) {
 		sections = raw.sections
@@ -232,7 +255,7 @@ function sanitizeJournal(raw: unknown, fallback: JournalConfig): JournalConfig {
 	} else {
 		sections = fallback.sections;
 	}
-	return { dir, sections };
+	return { dir, templateNote, filenameFormat, sections };
 }
 
 function sanitizeQueries(raw: unknown): CustomQuery[] {
@@ -240,7 +263,11 @@ function sanitizeQueries(raw: unknown): CustomQuery[] {
 	return raw
 		.filter((q): q is Record<string, unknown> => isRecord(q) && typeof q.code === "string")
 		.filter((q) => QUERY_KINDS.includes(q.kind as QueryKind))
-		.map((q) => ({ kind: q.kind as QueryKind, code: String(q.code) }))
+		.map((q) => ({
+			...(typeof q.title === "string" && q.title.trim() !== "" ? { title: q.title.trim() } : {}),
+			kind: q.kind as QueryKind,
+			code: String(q.code),
+		}))
 		.filter((q) => q.code.trim() !== "");
 }
 
@@ -262,17 +289,23 @@ export function mergeConfig(saved: unknown): QJConfig {
 	if (saved.language === "zh" || saved.language === "en" || saved.language === "auto") {
 		base.language = saved.language;
 	}
-	if (typeof saved.templateNote === "string") {
-		base.templateNote = saved.templateNote;
-	}
 	if (isRecord(saved.journals)) {
 		for (const type of PERIOD_TYPES) {
 			base.journals[type] = sanitizeJournal(saved.journals[type], base.journals[type]);
 		}
+		// 0.6–0.10 的顶层 templateNote 迁到 journals.daily（各类型未单独设置时）
+		if (typeof saved.templateNote === "string" && base.journals.daily.templateNote === "") {
+			base.journals.daily.templateNote = saved.templateNote;
+		}
 	} else if (typeof saved.dailyDir === "string" || Array.isArray(saved.sections)) {
-		// v0.5 迁移：dailyDir + sections → journals.daily
+		// v0.5 迁移：dailyDir + sections（+ 旧顶层 templateNote）→ journals.daily
 		base.journals.daily = sanitizeJournal(
-			{ dir: saved.dailyDir, sections: saved.sections },
+			{
+				dir: saved.dailyDir,
+				templateNote:
+					typeof saved.templateNote === "string" ? saved.templateNote : undefined,
+				sections: saved.sections,
+			},
 			base.journals.daily,
 		);
 	}

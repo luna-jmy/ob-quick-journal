@@ -3,6 +3,7 @@ import { boolStats, numberStats, taskStats } from "../src/metrics/aggregate";
 import type { DayRecord } from "../src/metrics/day-record";
 import { DEFAULT_JOURNALS, BOOL_YES, BOOL_NO, mergeConfig } from "../src/types";
 import { skeletonFor, noteKeyFor } from "../src/capture/skeleton";
+import { formatTokens } from "../src/periods/period";
 import { parseFieldLines } from "../src/parse/field-lines";
 
 function rec(date: string, fieldValues: Record<string, string>, taskLines: string[] = []): DayRecord {
@@ -96,14 +97,40 @@ describe("骨架生成（round-trip）与类型键", () => {
 	it("v0.5 扁平配置迁移到按类型组织", () => {
 		const migrated = mergeConfig({
 			dailyDir: "999 Custom",
+			templateNote: "999/TPL.md",
 			sections: [
 				{ id: "x", heading: "## X", type: "list", fields: [] },
 			],
 			language: "en",
 		});
 		expect(migrated.journals.daily.dir).toBe("999 Custom");
+		expect(migrated.journals.daily.templateNote).toBe("999/TPL.md");
 		expect(migrated.journals.daily.sections[0].id).toBe("x");
 		expect(migrated.journals.weekly.dir).toBe(DEFAULT_JOURNALS.weekly.dir);
 		expect(migrated.language).toBe("en");
+	});
+});
+
+describe("文件名格式（moment 语法子集）", () => {
+	const now = new Date(2026, 8, 25); // 2026-09-25，周 39
+
+	it("默认格式：日/周/月/年", () => {
+		expect(noteKeyFor("daily", now)).toBe("2026-09-25");
+		expect(noteKeyFor("weekly", now)).toBe("2026-W39");
+		expect(noteKeyFor("monthly", now)).toBe("2026-09");
+		expect(noteKeyFor("annual", now)).toBe("2026");
+	});
+
+	it("自定义格式与字面量", () => {
+		expect(formatTokens(now, "日志-YYYYMMDD")).toBe("日志-20260925");
+		expect(formatTokens(now, "YYYY 第 ww 周")).toBe("2026 第 39 周");
+		expect(formatTokens(now, "YYYY-[W]ww")).toBe("2026-W39");
+		// 2026-01-01 是周四 → W01 为 12-29~01-04，01-05（周一）已是 W02
+		expect(formatTokens(new Date(2026, 0, 5), "YYYY-[W]ww")).toBe("2026-W02");
+	});
+
+	it("骨架标题跟随自定义格式", () => {
+		const text = skeletonFor("daily", now, [], "日志-YYYYMMDD");
+		expect(text).toContain("# 日志-20260925 日志");
 	});
 });

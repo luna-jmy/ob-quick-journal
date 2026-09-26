@@ -122,3 +122,70 @@ export function parseNoteDateKind(name: string): { kind: PeriodKind | "day"; key
 	if (/^\d{4}$/.test(base)) return { kind: "year", key: base };
 	return null;
 }
+
+/**
+ * moment 风格的文件名格式（纯函数，语法子集与 moment 一致）：
+ * 支持 YYYY YY MM M DD D ww w（ww = ISO 周）与 [字面量]；其余字符原样输出。
+ * 文档：https://momentjs.com/docs/#/displaying/format/
+ */
+export function formatTokens(d: Date, fmt: string): string {
+	const { week } = isoWeekOf(d);
+	const pad2 = (n: number) => String(n).padStart(2, "0");
+	let out = "";
+	let i = 0;
+	while (i < fmt.length) {
+		if (fmt[i] === "[") {
+			const end = fmt.indexOf("]", i);
+			if (end === -1) {
+				out += fmt.slice(i + 1);
+				break;
+			}
+			out += fmt.slice(i + 1, end);
+			i = end + 1;
+			continue;
+		}
+		if (fmt.startsWith("YYYY", i)) {
+			out += String(d.getFullYear());
+			i += 4;
+			continue;
+		}
+		if (fmt.startsWith("YY", i)) {
+			out += String(d.getFullYear()).slice(2);
+			i += 2;
+			continue;
+		}
+		if (fmt.startsWith("MM", i)) {
+			out += pad2(d.getMonth() + 1);
+			i += 2;
+			continue;
+		}
+		if (fmt.startsWith("DD", i)) {
+			out += pad2(d.getDate());
+			i += 2;
+			continue;
+		}
+		if (fmt.startsWith("ww", i)) {
+			out += pad2(week);
+			i += 2;
+			continue;
+		}
+		if (fmt[i] === "M") {
+			out += String(d.getMonth() + 1);
+			i++;
+			continue;
+		}
+		if (fmt[i] === "D") {
+			out += String(d.getDate());
+			i++;
+			continue;
+		}
+		if (fmt[i] === "w") {
+			out += String(week);
+			i++;
+			continue;
+		}
+		out += fmt[i];
+		i++;
+	}
+	return out;
+}

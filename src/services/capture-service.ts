@@ -15,6 +15,7 @@ import {
 	type WritePlan,
 } from "../capture/plan";
 import { noteKeyFor, skeletonFor } from "../capture/skeleton";
+import { VaultIndex } from "./vault-index";
 import { renderFieldLine } from "../parse/field-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { convertListTask, toggleTaskLine } from "../parse/line-ops";
@@ -38,9 +39,16 @@ export class CaptureService {
 		return this.getConfig().journals[type];
 	}
 
+	/** 目标笔记路径：先按配置格式生成键，递归找已有笔记（含子目录）；没有则回目录根新建。 */
 	notePath(type: PeriodType, now: Date): string {
-		const dir = this.journal(type).dir.replace(/\/+$/, "");
-		return `${dir}/${noteKeyFor(type, now)}.md`;
+		const journal = this.journal(type);
+		const key = noteKeyFor(type, now, journal.filenameFormat);
+		const index = new VaultIndex(this.app, journal.dir);
+		const existing =
+			type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
+		if (existing) return existing.path;
+		const dir = journal.dir.replace(/\/+$/, "");
+		return `${dir}/${key}.md`;
 	}
 
 	/** 兼容旧调用（面板 / 日志定位用）。 */
@@ -66,7 +74,12 @@ export class CaptureService {
 		try {
 			text = await readNoteText(this.app, path);
 		} catch {
-			const skeleton = skeletonFor(type, now, this.journal(type).sections);
+			const skeleton = skeletonFor(
+				type,
+				now,
+				this.journal(type).sections,
+				this.journal(type).filenameFormat,
+			);
 			const file: TFile = await ensureNote(this.app, path, skeleton);
 			created = true;
 			text = await this.app.vault.cachedRead(file);

@@ -151,17 +151,6 @@ export class PanelView extends ItemView {
 			this.render();
 		});
 
-		const doneBtn = toolbar.createEl("button", {
-			cls: `qj-btn qj-icon-btn${this.showDone ? " is-active" : ""}`,
-		});
-		doneBtn.type = "button";
-		doneBtn.setAttribute("aria-label", t("显示已完成任务"));
-		setIcon(doneBtn, this.showDone ? "eye" : "eye-off");
-		doneBtn.onclick = () => {
-			this.plugin.config.panel.showCompleted = !this.showDone;
-			void this.plugin.saveConfig().then(() => this.render());
-		};
-
 		// 未完成任务滚动：从最近一期日志搬到今天（确认后原子迁移）
 		const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
 		rollBtn.type = "button";

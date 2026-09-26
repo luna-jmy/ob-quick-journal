@@ -10,6 +10,7 @@ import { skeletonFor } from "../capture/skeleton";
 import type { PeriodType, QJConfig } from "../types";
 import { dateKey } from "../periods/period";
 import { applyPlanToFile, ensureNote, readNoteText } from "./file-writer";
+import { VaultIndex } from "./vault-index";
 
 export interface RolloverPreview {
 	sourcePath: string;
@@ -42,20 +43,19 @@ export class RolloverService {
 		return `${this.dir("daily")}/${dateStr}.md`;
 	}
 
-	/** 往回找最近一期有未完成任务的日日志（不含今天）。 */
+	/** 往回找最近一期有未完成任务的日日志（不含今天；递归子目录，按归属日期倒序）。 */
 	async preview(now: Date): Promise<RolloverPreview | null> {
 		const markers = this.markers();
-		const cursor = new Date(now);
-		for (let i = 0; i < MAX_LOOKBACK; i++) {
-			cursor.setDate(cursor.getDate() - 1);
-			const path = this.dailyPath(dateKey(cursor));
-			const file = this.app.vault.getAbstractFileByPath(path);
-			if (!(file instanceof TFile)) continue;
-			const text = await this.app.vault.cachedRead(file);
+		const today = dateKey(now);
+		const entries = new VaultIndex(this.app, this.dir("daily")).dailyEntries();
+		for (const entry of entries) {
+			if (entry.date >= today) continue;
+			const text = await this.app.vault.cachedRead(entry.file);
 			const blocks = extractUnfinishedBlocks(text.split(/\r?\n/), markers);
 			if (blocks.length > 0) {
-				return { sourcePath: path, sourceDate: dateKey(cursor), blocks };
+				return { sourcePath: entry.file.path, sourceDate: entry.date, blocks };
 			}
+			if (entries.indexOf(entry) >= MAX_LOOKBACK) break;
 		}
 		return null;
 	}

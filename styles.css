@@ -26,6 +26,7 @@
 .qj-toolbar-nav {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: var(--size-2-2);
 	margin-left: auto;
 }
@@ -521,7 +522,7 @@
 	padding: var(--size-2-1) var(--size-2-2);
 }
 
-/* 窄屏：搜索独占一行；操作按钮常显 */
+/* 窄屏：搜索独占一行；操作按钮常显；汇总导航可换行；周热力图文字缩小 */
 @media (max-width: 520px) {
 	.qj-search {
 		flex-basis: 100%;
@@ -534,6 +535,29 @@
 
 	.qj-composer {
 		padding: var(--size-2-1) var(--size-2-2);
+	}
+
+	.qj-toolbar-nav {
+		gap: var(--size-1-1, 2px);
+	}
+
+	.qj-btn {
+		padding: var(--size-2-1) var(--size-2-2);
+		font-size: var(--font-ui-smaller);
+	}
+
+	.qj-hm-big {
+		aspect-ratio: auto;
+		min-height: 3.4em;
+		gap: 1px;
+	}
+
+	.qj-hm-big-label {
+		font-size: 9px;
+	}
+
+	.qj-hm-big-count {
+		font-size: 1.05em;
 	}
 }
 
@@ -938,6 +962,13 @@
 
 .qj-query-block {
 	margin-bottom: var(--size-4-2);
+}
+
+.qj-query-title {
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
+	margin-bottom: var(--size-2-1);
 }
 
 .qj-query-chip {

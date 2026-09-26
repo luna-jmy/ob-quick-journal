@@ -10,6 +10,7 @@ import { mergeConfig } from "./types";
 import { setLanguage, t } from "./i18n";
 import { CaptureService } from "./services/capture-service";
 import { ensureNote } from "./services/file-writer";
+import { VaultIndex } from "./services/vault-index";
 import { skeletonFor } from "./capture/skeleton";
 import { CaptureModal } from "./ui/capture-modal";
 import { ConfirmModal } from "./ui/confirm-modal";
@@ -172,13 +173,13 @@ export default class QuickJournalPlugin extends Plugin {
 		await workspace.revealLeaf(leaf);
 	}
 
-	/** 打开某期间的日志/复盘笔记（不存在则按该类型标题区建骨架）。月历的年/月/周入口用。 */
+	/** 打开某期间的日志/复盘笔记（递归子目录查找；不存在则按该类型建骨架到目录根）。月历入口用。 */
 	async openPeriodNote(type: PeriodType, key: string): Promise<void> {
-		const dir = this.config.journals[type].dir.replace(/\/+$/, "");
-		const path = `${dir}/${key}.md`;
-		const existing = this.app.vault.getAbstractFileByPath(path);
+		const journal = this.config.journals[type];
+		const index = new VaultIndex(this.app, journal.dir);
+		const existing = type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
 		let file: TFile;
-		if (existing instanceof TFile) {
+		if (existing) {
 			file = existing;
 		} else {
 			const period = periodFromKey(key);
@@ -186,8 +187,9 @@ export default class QuickJournalPlugin extends Plugin {
 				new Notice(`${t("写入失败")}: ${key}`);
 				return;
 			}
-			const skeleton = skeletonFor(type, period.start, this.config.journals[type].sections);
-			file = await ensureNote(this.app, path, skeleton);
+			const skeleton = skeletonFor(type, period.start, journal.sections, journal.filenameFormat);
+			const dir = journal.dir.replace(/\/+$/, "");
+			file = await ensureNote(this.app, `${dir}/${key}.md`, skeleton);
 		}
 		await this.app.workspace.getLeaf(false).openFile(file);
 	}

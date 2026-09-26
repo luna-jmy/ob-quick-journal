@@ -434,6 +434,7 @@ export async function renderQueryPanel(card: HTMLElement, app: App, ctx: Summary
 	const bridge = new QueryBridge(app);
 	for (const q of config.summaryQueries) {
 		const wrap = card.createDiv({ cls: "qj-query-block" });
+		if (q.title) wrap.createDiv({ cls: "qj-query-title", text: q.title });
 		wrap.createSpan({ cls: "qj-query-chip", text: q.kind });
 		const body = wrap.createDiv({ cls: "qj-query-body" });
 		const ok =
@@ -456,6 +457,7 @@ function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 	const rerender = ctx.rerender;
 	for (const q of [...config.summaryQueries]) {
 		const row = card.createDiv({ cls: "qj-query-edit-row" });
+		if (q.title) row.createSpan({ cls: "qj-query-title", text: q.title });
 		row.createSpan({ cls: "qj-query-chip", text: q.kind });
 		row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
 		const del = row.createEl("button", { cls: "qj-feed-btn" });
@@ -469,6 +471,8 @@ function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 		};
 	}
 	const add = card.createDiv({ cls: "qj-query-add" });
+	const titleInput = add.createEl("input", { cls: "qj-input", type: "text" });
+	titleInput.placeholder = t("查询标题");
 	const kindSel = add.createEl("select", { cls: "qj-input" });
 	for (const k of ["dataview", "dataviewjs"] as QueryKind[]) {
 		kindSel.createEl("option", { text: k, attr: { value: k } });
@@ -480,7 +484,12 @@ function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 	btn.type = "button";
 	btn.onclick = async () => {
 		if (code.value.trim() === "") return;
-		config.summaryQueries.push({ kind: kindSel.value as QueryKind, code: code.value.trim() });
+		const title = titleInput.value.trim();
+		config.summaryQueries.push({
+			...(title !== "" ? { title } : {}),
+			kind: kindSel.value as QueryKind,
+			code: code.value.trim(),
+		});
 		await ctx.plugin.saveConfig();
 		rerender();
 	};

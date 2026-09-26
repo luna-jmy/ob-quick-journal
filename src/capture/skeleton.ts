@@ -5,30 +5,38 @@
 
 import type { JournalSection, PeriodType } from "../types";
 import { renderFieldLine } from "../parse/field-lines";
-import { dateKey, isoWeekOf, mondayOfIsoWeek } from "../periods/period";
+import { dateKey, formatTokens, isoWeekOf, mondayOfIsoWeek } from "../periods/period";
 
 function pad2(n: number): string {
 	return String(n).padStart(2, "0");
 }
 
-/** 各类型的目标笔记文件名：daily=YYYY-MM-DD，weekly=YYYY-Www，monthly=YYYY-MM，annual=YYYY。 */
-export function noteKeyFor(type: PeriodType, now: Date): string {
-	if (type === "weekly") {
-		const { year, week } = isoWeekOf(now);
-		return `${year}-W${pad2(week)}`;
-	}
-	if (type === "monthly") return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
-	if (type === "annual") return String(now.getFullYear());
-	return dateKey(now);
+/** 各类型的目标笔记文件名（按配置的 moment 格式；缺省用默认格式）。 */
+export function noteKeyFor(type: PeriodType, now: Date, format?: string): string {
+	const fmt =
+		format ??
+		(type === "weekly"
+			? "YYYY-[W]ww"
+			: type === "monthly"
+				? "YYYY-MM"
+				: type === "annual"
+					? "YYYY"
+					: "YYYY-MM-DD");
+	return formatTokens(now, fmt);
 }
 
-export function skeletonFor(type: PeriodType, now: Date, sections: JournalSection[]): string {
+export function skeletonFor(
+	type: PeriodType,
+	now: Date,
+	sections: JournalSection[],
+	filenameFormat?: string,
+): string {
 	const day = dateKey(now);
 	let frontmatter: string[];
 	let title: string;
 	if (type === "weekly") {
 		const { year, week } = isoWeekOf(now);
-		const key = `${year}-W${pad2(week)}`;
+		const key = noteKeyFor("weekly", now, filenameFormat);
 		frontmatter = [
 			"---",
 			"journal: Weekly",
@@ -44,7 +52,7 @@ export function skeletonFor(type: PeriodType, now: Date, sections: JournalSectio
 		];
 		title = `# ${key} 周日志`;
 	} else if (type === "monthly") {
-		const key = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+		const key = noteKeyFor("monthly", now, filenameFormat);
 		frontmatter = [
 			"---",
 			"journal: Monthly",
@@ -59,6 +67,7 @@ export function skeletonFor(type: PeriodType, now: Date, sections: JournalSectio
 		];
 		title = `# ${key} 月度日志`;
 	} else if (type === "annual") {
+		const key = noteKeyFor("annual", now, filenameFormat);
 		frontmatter = [
 			"---",
 			"journal: Annual",
@@ -70,8 +79,9 @@ export function skeletonFor(type: PeriodType, now: Date, sections: JournalSectio
 			"  - journal/annual",
 			"---",
 		];
-		title = `# ${now.getFullYear()} 年度日志`;
+		title = `# ${key} 年度日志`;
 	} else {
+		const key = noteKeyFor("daily", now, filenameFormat);
 		frontmatter = [
 			"---",
 			"journal: Daily",
@@ -82,7 +92,7 @@ export function skeletonFor(type: PeriodType, now: Date, sections: JournalSectio
 			"  - journal/daily",
 			"---",
 		];
-		title = `# ${day} 日志`;
+		title = `# ${key} 日志`;
 	}
 
 	const lines = [...frontmatter, "", title, ""];
