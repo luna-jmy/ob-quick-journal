@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-25T15:55:18.684Z */
+/* Quick Journal — bundled 2026-09-26T04:17:15.441Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -24,7 +24,7 @@ __export(main_exports, {
   default: () => QuickJournalPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 
 // src/types.ts
 var BOOL_YES = "\u2714\uFE0F";
@@ -135,7 +135,9 @@ var DEFAULT_CONFIG = {
   journals: DEFAULT_JOURNALS,
   summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
   summaryQueries: [],
-  viewLocations: { summary: "tab", panel: "tab" }
+  viewLocations: { summary: "tab", panel: "tab" },
+  panel: { showCompleted: true },
+  rollover: { openMarkers: [" ", ">"] }
 };
 function isRecord(v) {
   return typeof v === "object" && v !== null;
@@ -221,6 +223,16 @@ function mergeConfig(saved) {
       base.viewLocations.panel = vl.panel;
     }
   }
+  if (isRecord(saved.panel)) {
+    if (typeof saved.panel.showCompleted === "boolean") {
+      base.panel.showCompleted = saved.panel.showCompleted;
+    }
+  }
+  if (isRecord(saved.rollover) && Array.isArray(saved.rollover.openMarkers)) {
+    const markers = saved.rollover.openMarkers;
+    const cleaned = markers.filter((m) => typeof m === "string" && m.length === 1);
+    if (cleaned.length > 0) base.rollover.openMarkers = cleaned;
+  }
   return base;
 }
 
@@ -292,6 +304,17 @@ var EN = {
   "\u6CA1\u6709\u5339\u914D\u7684\u4EFB\u52A1": "No matching tasks",
   "\u5C55\u5F00\u5F55\u5165": "Show capture bar",
   "\u6536\u8D77\u5F55\u5165": "Hide capture bar",
+  "\u663E\u793A\u5DF2\u5B8C\u6210\u4EFB\u52A1": "Show completed tasks",
+  "\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6": "Unfinished task markers",
+  "\u6EDA\u52A8\u65F6\u8BA1\u5165\u672A\u5B8C\u6210\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694\uFF1B\u2423 \u8868\u793A\u7A7A\u683C": "Checkbox characters treated as unfinished when rolling over (comma-separated; \u2423 means space)",
+  "\u6EDA\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Roll over unfinished tasks",
+  "\u79FB\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Move unfinished tasks",
+  "\u6765\u81EA": "From",
+  "\u4E2A\u4EFB\u52A1\u5757": "task blocks",
+  "\u6CA1\u6709\u53EF\u79FB\u52A8\u7684\u4EFB\u52A1": "No unfinished tasks to move",
+  "\u5DF2\u79FB\u52A8": "Moved",
+  "\u79FB\u52A8": "Move",
+  "Enter \u53D1\u9001 \xB7 Shift+Enter \u6362\u884C": "Enter to send \xB7 Shift+Enter for a new line",
   "\u9700\u8981 Dataview \u6E32\u67D3": "Requires the Dataview plugin",
   "\u9700\u8981 Tasks \u6E32\u67D3": "Requires the Tasks plugin",
   "\u6E32\u67D3\u5931\u8D25": "Failed to render",
@@ -587,6 +610,25 @@ function planDeleteLineAt(lineIndex) {
     edits: [],
     creates: [],
     removeLines: { start: lineIndex, end: lineIndex + 1 }
+  };
+}
+function planInsertLines(lines, opts) {
+  if (opts.newLines.length === 0) {
+    return { status: "ok", edits: [], creates: [] };
+  }
+  const single = planAppend(lines, {
+    heading: opts.heading,
+    headingMissingCreates: opts.headingMissingCreates,
+    line: opts.newLines[0]
+  });
+  if (single.status !== "ok") return single;
+  if (single.creates.length === 0) return single;
+  const anchor = single.creates[0].afterLineIndex;
+  return {
+    status: "ok",
+    createHeading: single.createHeading,
+    edits: [],
+    creates: opts.newLines.map((line) => ({ afterLineIndex: anchor, line }))
   };
 }
 function applyPlan(text, plan) {
@@ -2136,11 +2178,146 @@ var SummaryView = class extends import_obsidian7.ItemView {
 };
 
 // src/views/panel-view.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
+
+// src/services/rollover-service.ts
+var import_obsidian8 = require("obsidian");
+
+// src/capture/rollover.ts
+function openTaskMatcher(markers) {
+  const escaped = markers.map((m) => m.replace(/[\\\]^-]/g, "\\$&")).join("");
+  const re = new RegExp(`^\\s*-\\s\\[[${escaped}]\\]\\s`);
+  return (line) => re.test(line);
+}
+function extractUnfinishedBlocks(lines, markers) {
+  const isOpenTask = openTaskMatcher(markers);
+  const blocks = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (!isOpenTask(lines[i])) {
+      i++;
+      continue;
+    }
+    const start = i;
+    const blockLines = [lines[i]];
+    let j = i + 1;
+    while (j < lines.length) {
+      const next = lines[j];
+      if (next.trim() === "") {
+        const look = j + 1;
+        if (look < lines.length && /^\s+\S/.test(lines[look])) {
+          blockLines.push(next, lines[look]);
+          j = look + 1;
+          continue;
+        }
+        break;
+      }
+      if (/^\s+\S/.test(next)) {
+        blockLines.push(next);
+        j++;
+        continue;
+      }
+      break;
+    }
+    blocks.push({ start, end: j, lines: [...blockLines] });
+    i = j;
+  }
+  return blocks;
+}
+function removeBlocks(text, blocks) {
+  const lines = text.split(/\r?\n/);
+  const sorted = [...blocks].sort((a, b) => b.start - a.start);
+  for (const block of sorted) {
+    lines.splice(block.start, block.end - block.start);
+  }
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+function blocksToLines(blocks) {
+  return blocks.flatMap((b) => b.lines);
+}
+
+// src/services/rollover-service.ts
+var MAX_LOOKBACK = 365;
+var RolloverService = class {
+  constructor(app, getConfig) {
+    this.app = app;
+    this.getConfig = getConfig;
+  }
+  dir(type) {
+    return this.getConfig().journals[type].dir.replace(/\/+$/, "");
+  }
+  dailyPath(dateStr) {
+    return `${this.dir("daily")}/${dateStr}.md`;
+  }
+  /** 往回找最近一期有未完成任务的日日志（不含今天）。 */
+  async preview(now) {
+    const markers = this.getConfig().rollover.openMarkers;
+    const cursor = new Date(now);
+    for (let i = 0; i < MAX_LOOKBACK; i++) {
+      cursor.setDate(cursor.getDate() - 1);
+      const path = this.dailyPath(dateKey(cursor));
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof import_obsidian8.TFile)) continue;
+      const text = await this.app.vault.cachedRead(file);
+      const blocks = extractUnfinishedBlocks(text.split(/\r?\n/), markers);
+      if (blocks.length > 0) {
+        return { sourcePath: path, sourceDate: dateKey(cursor), blocks };
+      }
+    }
+    return null;
+  }
+  /** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区）。 */
+  async perform(preview, now) {
+    var _a;
+    const config = this.getConfig();
+    const todayPath = this.dailyPath(dateKey(now));
+    try {
+      await readNoteText(this.app, todayPath);
+    } catch (e) {
+      await ensureNote(this.app, todayPath, skeletonFor("daily", now, config.journals.daily.sections));
+    }
+    let todayText;
+    try {
+      todayText = await readNoteText(this.app, todayPath);
+    } catch (e) {
+      return { ok: false, message: `note not found: ${todayPath}` };
+    }
+    const sections = config.journals.daily.sections;
+    const target = (_a = sections.find((s) => {
+      var _a2;
+      return s.type === "list" && ((_a2 = s.lineTemplate) != null ? _a2 : "").includes("[ ]");
+    })) != null ? _a : sections.find((s) => s.type === "list");
+    const lines = blocksToLines(preview.blocks);
+    const todayLines = todayText.split(/\r?\n/);
+    const plan = target ? planInsertLines(todayLines, {
+      heading: target.heading,
+      headingMissingCreates: true,
+      newLines: lines
+    }) : planInsertLines(todayLines, {
+      heading: "## Tasks",
+      headingMissingCreates: true,
+      newLines: lines
+    });
+    if (plan.status !== "ok") {
+      return { ok: false, message: plan.reason };
+    }
+    await applyPlanToFile(this.app, todayPath, plan);
+    const markers = this.getConfig().rollover.openMarkers;
+    const sourceFile = this.app.vault.getAbstractFileByPath(preview.sourcePath);
+    if (!(sourceFile instanceof import_obsidian8.TFile)) {
+      return { ok: false, message: `note not found: ${preview.sourcePath}` };
+    }
+    await this.app.vault.process(
+      sourceFile,
+      (text) => removeBlocks(text, extractUnfinishedBlocks(text.split(/\r?\n/), markers))
+    );
+    return { ok: true, moved: preview.blocks.length, from: preview.sourceDate };
+  }
+};
 
 // src/ui/entry-edit-modal.ts
-var import_obsidian8 = require("obsidian");
-var EntryEditModal = class extends import_obsidian8.Modal {
+var import_obsidian9 = require("obsidian");
+var EntryEditModal = class extends import_obsidian9.Modal {
   constructor(app, title, initial, multiline, onSave) {
     super(app);
     this.initial = initial;
@@ -2159,7 +2336,7 @@ var EntryEditModal = class extends import_obsidian8.Modal {
     cancel.onclick = () => this.close();
     const save = footer.createEl("button", { cls: "qj-btn qj-btn-primary", text: t("\u4FDD\u5B58") });
     save.type = "button";
-    (0, import_obsidian8.setIcon)(save.createSpan({ cls: "qj-btn-icon" }), "check");
+    (0, import_obsidian9.setIcon)(save.createSpan({ cls: "qj-btn-icon" }), "check");
     save.onclick = () => {
       this.onSave(input.value);
       this.close();
@@ -2170,7 +2347,7 @@ var EntryEditModal = class extends import_obsidian8.Modal {
 // src/views/panel-view.ts
 var VIEW_TYPE_QJ_PANEL = "qj-panel";
 var FILTER_ALL = "__all__";
-var PanelView = class extends import_obsidian9.ItemView {
+var PanelView = class extends import_obsidian10.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2181,12 +2358,14 @@ var PanelView = class extends import_obsidian9.ItemView {
     this.targetId = "";
     /** 筛选（同时控制输入目标与展示范围）；空串 = 全部 */
     this.filterId = "";
-    this.showDone = true;
     this.searchText = "";
     /** 顶部功能区收起（手机端把内容区顶上来） */
     this.collapsed = false;
     /** 日志文件变更 → 防抖刷新（obsidian 自带 debounce，取消语义清晰） */
-    this.scheduleRefresh = (0, import_obsidian9.debounce)(() => void this.loadFeed(), 1200, true);
+    this.scheduleRefresh = (0, import_obsidian10.debounce)(() => void this.loadFeed(), 1200, true);
+  }
+  get showDone() {
+    return this.plugin.config.panel.showCompleted;
   }
   getViewType() {
     return VIEW_TYPE_QJ_PANEL;
@@ -2201,7 +2380,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     this.render();
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
-        if (file instanceof import_obsidian9.TFile && file.path.startsWith(this.plugin.config.journals.daily.dir)) {
+        if (file instanceof import_obsidian10.TFile && file.path.startsWith(this.plugin.config.journals.daily.dir)) {
           this.scheduleRefresh();
         }
       })
@@ -2230,7 +2409,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     });
     toggle.type = "button";
     toggle.setAttribute("aria-label", this.collapsed ? t("\u5C55\u5F00\u5F55\u5165") : t("\u6536\u8D77\u5F55\u5165"));
-    (0, import_obsidian9.setIcon)(toggle, this.collapsed ? "chevrons-down" : "chevrons-up");
+    (0, import_obsidian10.setIcon)(toggle, this.collapsed ? "chevrons-down" : "chevrons-up");
     toggle.onclick = () => {
       this.collapsed = !this.collapsed;
       this.render();
@@ -2259,7 +2438,7 @@ var PanelView = class extends import_obsidian9.ItemView {
         this.render();
       };
     }
-    const filterDrop = new import_obsidian9.DropdownComponent(toolbar);
+    const filterDrop = new import_obsidian10.DropdownComponent(toolbar);
     filterDrop.addOption(FILTER_ALL, t("\u5168\u90E8"));
     for (const s of this.panelSections()) {
       filterDrop.addOption(s.id, s.heading.replace(/^#+\s*/, ""));
@@ -2273,12 +2452,17 @@ var PanelView = class extends import_obsidian9.ItemView {
       cls: `qj-btn qj-icon-btn${this.showDone ? " is-active" : ""}`
     });
     doneBtn.type = "button";
-    doneBtn.setAttribute("aria-label", t("\u663E\u793A\u5DF2\u5B8C\u6210"));
-    (0, import_obsidian9.setIcon)(doneBtn, this.showDone ? "eye" : "eye-off");
+    doneBtn.setAttribute("aria-label", t("\u663E\u793A\u5DF2\u5B8C\u6210\u4EFB\u52A1"));
+    (0, import_obsidian10.setIcon)(doneBtn, this.showDone ? "eye" : "eye-off");
     doneBtn.onclick = () => {
-      this.showDone = !this.showDone;
-      this.render();
+      this.plugin.config.panel.showCompleted = !this.showDone;
+      void this.plugin.saveConfig().then(() => this.render());
     };
+    const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
+    rollBtn.type = "button";
+    rollBtn.setAttribute("aria-label", t("\u6EDA\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1"));
+    (0, import_obsidian10.setIcon)(rollBtn, "arrow-down-up");
+    rollBtn.onclick = () => void this.rollover();
     const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
     search.type = "search";
     search.placeholder = t("\u641C\u7D22");
@@ -2289,7 +2473,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     };
     const refresh = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
     refresh.type = "button";
-    (0, import_obsidian9.setIcon)(refresh, "refresh-cw");
+    (0, import_obsidian10.setIcon)(refresh, "refresh-cw");
     refresh.onclick = () => void this.loadFeed();
   }
   renderInput(root) {
@@ -2305,31 +2489,67 @@ var PanelView = class extends import_obsidian9.ItemView {
     if (!targets.some((s) => s.id === this.targetId)) {
       this.targetId = targets[0].id;
     }
-    const wrap = root.createDiv({ cls: "qj-panel-input" });
+    const box = root.createDiv({ cls: "qj-composer" });
+    const top = box.createDiv({ cls: "qj-composer-top" });
     if (targets.length > 1) {
-      const dropdown = new import_obsidian9.DropdownComponent(wrap);
+      const dropdown = new import_obsidian10.DropdownComponent(top);
       dropdown.addOptions(
         Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]))
       );
       dropdown.setValue(this.targetId);
       dropdown.onChange((value) => this.targetId = value);
+    } else {
+      top.createSpan({
+        cls: "qj-composer-target",
+        text: targets[0].heading.replace(/^#+\s*/, "")
+      });
     }
-    this.targetId = targets.some((s) => s.id === this.targetId) ? this.targetId : targets[0].id;
-    const input = wrap.createEl("textarea", { cls: "qj-input qj-textarea" });
-    input.rows = 2;
+    const input = box.createEl("textarea", { cls: "qj-composer-input" });
+    input.rows = 1;
     input.placeholder = t("\u8BB0\u70B9\u4EC0\u4E48\u2026");
     this.inputEl = input;
+    const grow = () => {
+      input.setCssProps({ height: "auto" });
+      input.setCssProps({ height: `${Math.min(input.scrollHeight, 160)}px` });
+    };
+    input.addEventListener("input", grow);
     input.addEventListener("keydown", (evt) => {
       if (evt.key === "Enter" && !evt.shiftKey) {
         evt.preventDefault();
         void this.send();
       }
     });
-    const send = wrap.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
+    const foot = box.createDiv({ cls: "qj-composer-foot" });
+    foot.createSpan({ cls: "qj-composer-hint", text: t("Enter \u53D1\u9001 \xB7 Shift+Enter \u6362\u884C") });
+    const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
     send.type = "button";
-    (0, import_obsidian9.setIcon)(send, "send");
-    send.setAttribute("aria-label", t("\u53D1\u9001"));
+    (0, import_obsidian10.setIcon)(send.createSpan({ cls: "qj-btn-icon" }), "send");
+    send.createSpan({ text: t("\u53D1\u9001") });
     send.onclick = () => void this.send();
+  }
+  /** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
+  async rollover() {
+    const service = new RolloverService(this.app, () => this.plugin.config);
+    const preview = await service.preview(/* @__PURE__ */ new Date());
+    if (preview === null) {
+      new import_obsidian10.Notice(t("\u6CA1\u6709\u53EF\u79FB\u52A8\u7684\u4EFB\u52A1"));
+      return;
+    }
+    new ConfirmModal(
+      this.app,
+      t("\u79FB\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1"),
+      `${t("\u6765\u81EA")} ${preview.sourceDate} \xB7 ${preview.blocks.length} ${t("\u4E2A\u4EFB\u52A1\u5757")}`,
+      async () => {
+        const result = await service.perform(preview, /* @__PURE__ */ new Date());
+        if (result.ok) {
+          new import_obsidian10.Notice(`${t("\u5DF2\u79FB\u52A8")} ${result.moved} ${t("\u4E2A\u4EFB\u52A1\u5757")} \u2192 ${result.from}`);
+          await this.loadFeed();
+        } else {
+          new import_obsidian10.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
+        }
+      },
+      t("\u79FB\u52A8")
+    ).open();
   }
   async send() {
     var _a, _b;
@@ -2349,7 +2569,7 @@ var PanelView = class extends import_obsidian9.ItemView {
               { date: today, sectionId: section.id, kind: "paragraph", text: existing },
               content
             );
-            if (!result2.ok) new import_obsidian9.Notice(this.entryError(result2.message));
+            if (!result2.ok) new import_obsidian10.Notice(this.entryError(result2.message));
             await this.loadFeed();
           })();
         }).open();
@@ -2368,7 +2588,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     if (result.ok) {
       await this.loadFeed();
     } else if (result.reason === "error") {
-      new import_obsidian9.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
+      new import_obsidian10.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
     }
   }
   async loadFeed() {
@@ -2451,7 +2671,7 @@ var PanelView = class extends import_obsidian9.ItemView {
         evt.stopPropagation();
         void (async () => {
           const r = await this.plugin.capture.toggleTaskEntry(section, entry);
-          if (!r.ok) new import_obsidian9.Notice(this.entryError(r.message));
+          if (!r.ok) new import_obsidian10.Notice(this.entryError(r.message));
           await this.loadFeed();
         })();
       };
@@ -2464,7 +2684,7 @@ var PanelView = class extends import_obsidian9.ItemView {
       this.actionButton(actions, "repeat", t("\u4EFB\u52A1/\u5217\u8868\u4E92\u8F6C"), () => {
         void (async () => {
           const r = await this.plugin.capture.convertEntry(section, entry);
-          if (!r.ok) new import_obsidian9.Notice(this.entryError(r.message));
+          if (!r.ok) new import_obsidian10.Notice(this.entryError(r.message));
           await this.loadFeed();
         })();
       });
@@ -2478,7 +2698,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     const btn = parent.createEl("button", { cls: "qj-feed-btn" });
     btn.type = "button";
     btn.setAttribute("aria-label", label);
-    (0, import_obsidian9.setIcon)(btn, icon);
+    (0, import_obsidian10.setIcon)(btn, icon);
     btn.onclick = (evt) => {
       evt.stopPropagation();
       onClick();
@@ -2501,7 +2721,7 @@ var PanelView = class extends import_obsidian9.ItemView {
           if (result.ok) {
             await this.loadFeed();
           } else {
-            new import_obsidian9.Notice(this.entryError(result.message));
+            new import_obsidian10.Notice(this.entryError(result.message));
           }
         })();
       }
@@ -2517,7 +2737,7 @@ var PanelView = class extends import_obsidian9.ItemView {
         if (result.ok) {
           await this.loadFeed();
         } else {
-          new import_obsidian9.Notice(this.entryError(result.message));
+          new import_obsidian10.Notice(this.entryError(result.message));
         }
       },
       t("\u5220\u9664")
@@ -2538,7 +2758,7 @@ var PanelView = class extends import_obsidian9.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 
 // src/parse/detect-sections.ts
 var HEADING_RE = /^#{1,6}\s/;
@@ -2615,7 +2835,7 @@ var SECTION_TYPE_LABEL = {
   list: "\u5217\u8868",
   paragraph: "\u6BB5\u843D"
 };
-var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
+var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -2626,7 +2846,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     const scroller = this.containerEl.closest(".vertical-tab-content");
     const scrollTop = (_a = scroller == null ? void 0 : scroller.scrollTop) != null ? _a : 0;
     this.containerEl.empty();
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
       drop.addOption("zh", t("\u4E2D\u6587"));
       drop.addOption("en", t("\u82F1\u6587"));
@@ -2644,8 +2864,28 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         this.display();
       });
     });
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u6253\u5F00\u4F4D\u7F6E")).setHeading();
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u6C47\u603B")).addDropdown((drop) => {
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u901F\u8BB0\u9762\u677F")).setHeading();
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u663E\u793A\u5DF2\u5B8C\u6210\u4EFB\u52A1")).addToggle(
+      (toggle) => toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
+        this.plugin.config.panel.showCompleted = value;
+        await this.plugin.saveConfig();
+      })
+    );
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6")).setDesc(t("\u6EDA\u52A8\u65F6\u8BA1\u5165\u672A\u5B8C\u6210\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694\uFF1B\u2423 \u8868\u793A\u7A7A\u683C")).addText((text) => {
+      text.setPlaceholder("\u2423,>");
+      text.setValue(
+        this.plugin.config.rollover.openMarkers.map((m) => m === " " ? "\u2423" : m).join(",")
+      );
+      text.onChange(async (value) => {
+        const markers = value.split(",").map((token) => token === "\u2423" ? " " : token).filter((token) => token.length === 1);
+        if (markers.length > 0) {
+          this.plugin.config.rollover.openMarkers = markers;
+          await this.plugin.saveConfig();
+        }
+      });
+    });
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u6253\u5F00\u4F4D\u7F6E")).setHeading();
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u6C47\u603B")).addDropdown((drop) => {
       drop.addOption("tab", t("\u6807\u7B7E\u9875"));
       drop.addOption("sidebar", t("\u53F3\u4FA7\u8FB9\u680F"));
       drop.setValue(this.plugin.config.viewLocations.summary);
@@ -2654,7 +2894,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         await this.plugin.saveConfig();
       });
     });
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u901F\u8BB0\u9762\u677F")).addDropdown((drop) => {
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u901F\u8BB0\u9762\u677F")).addDropdown((drop) => {
       drop.addOption("tab", t("\u6807\u7B7E\u9875"));
       drop.addOption("sidebar", t("\u53F3\u4FA7\u8FB9\u680F"));
       drop.setValue(this.plugin.config.viewLocations.panel);
@@ -2669,7 +2909,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       cls: "qj-setting-note",
       text: t("\u547D\u4EE4\u5728\u91CD\u8F7D\u63D2\u4EF6\u540E\u6309\u65B0\u914D\u7F6E\u751F\u6548\uFF1B\u5DE5\u5177\u680F\u6309\u94AE\u4E0E\u6C47\u603B\u89C6\u56FE\u5373\u65F6\u751F\u6548\u3002")
     });
-    new import_obsidian10.Setting(this.containerEl).addButton(
+    new import_obsidian11.Setting(this.containerEl).addButton(
       (btn) => btn.setButtonText(t("\u6062\u590D\u9ED8\u8BA4\u8BBE\u7F6E")).setWarning().onClick(() => {
         new ConfirmModal(
           this.app,
@@ -2677,7 +2917,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
           t("\u6062\u590D\u9ED8\u8BA4\u8BBE\u7F6E\u8BF4\u660E"),
           async () => {
             await this.plugin.resetConfig();
-            new import_obsidian10.Notice(t("\u5DF2\u6062\u590D\u9ED8\u8BA4\u8BBE\u7F6E\uFF0C\u91CD\u8F7D\u63D2\u4EF6\u540E\u547D\u4EE4\u6309\u65B0\u914D\u7F6E\u751F\u6548\u3002"));
+            new import_obsidian11.Notice(t("\u5DF2\u6062\u590D\u9ED8\u8BA4\u8BBE\u7F6E\uFF0C\u91CD\u8F7D\u63D2\u4EF6\u540E\u547D\u4EE4\u6309\u65B0\u914D\u7F6E\u751F\u6548\u3002"));
             this.display();
           },
           t("\u6062\u590D")
@@ -2703,7 +2943,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
   }
   renderCurrentJournal() {
     const journal = this.plugin.config.journals[this.tab];
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u76EE\u5F55")).addText((text) => {
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u65E5\u5FD7\u76EE\u5F55")).addText((text) => {
       text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/540 Daily"));
       text.setValue(journal.dir);
       text.onChange(async (value) => {
@@ -2712,7 +2952,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       });
     });
     if (this.tab === "daily") {
-      new import_obsidian10.Setting(this.containerEl).setName(t("\u6A21\u677F\u7B14\u8BB0")).setDesc(t("\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E")).addText((text) => {
+      new import_obsidian11.Setting(this.containerEl).setName(t("\u6A21\u677F\u7B14\u8BB0")).setDesc(t("\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E")).addText((text) => {
         text.setPlaceholder(t("\u793A\u4F8B\uFF1A500 Journal/TPL-Daily.md"));
         text.setValue(this.plugin.config.templateNote);
         text.onChange(async (value) => {
@@ -2723,11 +2963,11 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         (btn) => btn.setButtonText(t("\u4ECE\u6A21\u677F\u8BC6\u522B")).setCta().onClick(() => void this.detectFromTemplate())
       );
     }
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
     for (const section of journal.sections) {
       this.sectionEditor(journal, section);
     }
-    new import_obsidian10.Setting(this.containerEl).addButton(
+    new import_obsidian11.Setting(this.containerEl).addButton(
       (btn) => btn.setButtonText(t("\u6DFB\u52A0\u6807\u9898\u533A")).onClick(async () => {
         journal.sections.push({
           id: `sec-${Date.now()}`,
@@ -2741,31 +2981,31 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     );
   }
   async detectFromTemplate() {
-    const path = (0, import_obsidian10.normalizePath)(this.plugin.config.templateNote);
+    const path = (0, import_obsidian11.normalizePath)(this.plugin.config.templateNote);
     if (path === "") {
-      new import_obsidian10.Notice(t("\u8BF7\u5148\u586B\u5199\u6A21\u677F\u7B14\u8BB0\u8DEF\u5F84"));
+      new import_obsidian11.Notice(t("\u8BF7\u5148\u586B\u5199\u6A21\u677F\u7B14\u8BB0\u8DEF\u5F84"));
       return;
     }
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian10.TFile)) {
-      new import_obsidian10.Notice(`${t("\u627E\u4E0D\u5230\u7B14\u8BB0")}\uFF1A${path}`);
+    if (!(file instanceof import_obsidian11.TFile)) {
+      new import_obsidian11.Notice(`${t("\u627E\u4E0D\u5230\u7B14\u8BB0")}\uFF1A${path}`);
       return;
     }
     const text = await this.app.vault.cachedRead(file);
     const sections = detectedToSections(detectSections(text));
     if (sections.length === 0) {
-      new import_obsidian10.Notice(t("\u672A\u8BC6\u522B\u5230\u6807\u9898\u533A"));
+      new import_obsidian11.Notice(t("\u672A\u8BC6\u522B\u5230\u6807\u9898\u533A"));
       return;
     }
     this.plugin.config.journals.daily.sections = sections;
     await this.plugin.saveConfig();
     const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0);
-    new import_obsidian10.Notice(`${t("\u8BC6\u522B\u5230")} ${sections.length} ${t("\u4E2A\u6807\u9898\u533A")}\u3001${fieldCount} ${t("\u4E2A\u5B57\u6BB5")}`);
+    new import_obsidian11.Notice(`${t("\u8BC6\u522B\u5230")} ${sections.length} ${t("\u4E2A\u6807\u9898\u533A")}\u3001${fieldCount} ${t("\u4E2A\u5B57\u6BB5")}`);
     this.display();
   }
   sectionEditor(journal, section) {
     const container = this.containerEl.createDiv({ cls: "qj-section-editor" });
-    new import_obsidian10.Setting(container).addText((text) => {
+    new import_obsidian11.Setting(container).addText((text) => {
       text.setPlaceholder("### \u2026");
       text.setValue(section.heading);
       text.onChange(async (value) => {
@@ -2796,7 +3036,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       })
     );
     if (this.tab === "daily" && (section.type === "list" || section.type === "text" || section.type === "paragraph")) {
-      new import_obsidian10.Setting(container).setName(t("\u5F00\u542F\u5185\u5BB9\u6C47\u603B\u9762\u677F")).setDesc(t("\u5728\u901F\u8BB0\u9762\u677F\u91CC\u805A\u5408\u663E\u793A\u8BE5\u6807\u9898\u533A\u7684\u5185\u5BB9")).addToggle(
+      new import_obsidian11.Setting(container).setName(t("\u5F00\u542F\u5185\u5BB9\u6C47\u603B\u9762\u677F")).setDesc(t("\u5728\u901F\u8BB0\u9762\u677F\u91CC\u805A\u5408\u663E\u793A\u8BE5\u6807\u9898\u533A\u7684\u5185\u5BB9")).addToggle(
         (toggle) => toggle.setValue(section.panel === true).onChange(async (value) => {
           section.panel = value ? true : void 0;
           await this.plugin.saveConfig();
@@ -2805,7 +3045,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       );
     }
     if (this.tab === "daily" && (section.type === "list" || section.type === "paragraph")) {
-      new import_obsidian10.Setting(container).setName(t("\u81EA\u52A8\u6DFB\u52A0\u65F6\u95F4\u6233")).setDesc(t("\u8BB0\u5F55\u65F6\u81EA\u52A8\u52A0\u65F6\u95F4\u6233\u524D\u7F00\uFF08HH:mm\uFF09\uFF0C\u901F\u8BB0\u9762\u677F\u4F1A\u89E3\u6790\u5E76\u663E\u793A")).addToggle((toggle) => {
+      new import_obsidian11.Setting(container).setName(t("\u81EA\u52A8\u6DFB\u52A0\u65F6\u95F4\u6233")).setDesc(t("\u8BB0\u5F55\u65F6\u81EA\u52A8\u52A0\u65F6\u95F4\u6233\u524D\u7F00\uFF08HH:mm\uFF09\uFF0C\u901F\u8BB0\u9762\u677F\u4F1A\u89E3\u6790\u5E76\u663E\u793A")).addToggle((toggle) => {
         toggle.setDisabled(section.panel !== true);
         toggle.setValue(section.timestamp === true);
         toggle.onChange(async (value) => {
@@ -2815,7 +3055,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       });
     }
     if (section.type === "list") {
-      new import_obsidian10.Setting(container).setName(t("\u884C\u6A21\u677F")).setDesc("{{value}}").addText((text) => {
+      new import_obsidian11.Setting(container).setName(t("\u884C\u6A21\u677F")).setDesc("{{value}}").addText((text) => {
         var _a;
         text.setValue((_a = section.lineTemplate) != null ? _a : "- {{value}}");
         text.onChange(async (value) => {
@@ -2827,7 +3067,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     }
     if (section.type === "paragraph") return;
     for (const field of section.fields) {
-      const row = new import_obsidian10.Setting(container).setClass("qj-field-editor");
+      const row = new import_obsidian11.Setting(container).setClass("qj-field-editor");
       row.addText((text) => {
         text.setPlaceholder(t("\u5B57\u6BB5\u952E"));
         text.setValue(field.key);
@@ -2863,7 +3103,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         })
       );
     }
-    new import_obsidian10.Setting(container).addButton(
+    new import_obsidian11.Setting(container).addButton(
       (btn) => btn.setButtonText(t("\u6DFB\u52A0\u5B57\u6BB5")).onClick(async () => {
         section.fields.push({ key: "", label: "" });
         await this.plugin.saveConfig();
@@ -2880,7 +3120,7 @@ var TYPE_PREFIX2 = {
   monthly: "\u6708 \xB7 ",
   annual: "\u5E74 \xB7 "
 };
-var QuickJournalPlugin = class extends import_obsidian11.Plugin {
+var QuickJournalPlugin = class extends import_obsidian12.Plugin {
   /** obsidian.d.ts 1.8.7 未声明 App.locale（运行时存在），收口在这一个转换里 */
   localeOf(app) {
     return app == null ? void 0 : app.locale;
@@ -2974,7 +3214,7 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     const result = await this.capture.performSection(type, section, payload, { overwrite });
     if (result.ok) {
       const note = result.created ? `${t("\u521B\u5EFA\u7B14\u8BB0")} \xB7 ` : "";
-      new import_obsidian11.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);
+      new import_obsidian12.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);
       return;
     }
     if (result.reason === "overwrite") {
@@ -2986,7 +3226,7 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       ).open();
       return;
     }
-    new import_obsidian11.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
+    new import_obsidian12.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
   }
   /** 打开（或聚焦）某个视图；位置按设置（标签页 / 右侧边栏）。 */
   async openView(viewType, location = "tab") {
@@ -3006,12 +3246,12 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     const path = `${dir}/${key}.md`;
     const existing = this.app.vault.getAbstractFileByPath(path);
     let file;
-    if (existing instanceof import_obsidian11.TFile) {
+    if (existing instanceof import_obsidian12.TFile) {
       file = existing;
     } else {
       const period = periodFromKey(key);
       if (period === null) {
-        new import_obsidian11.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${key}`);
+        new import_obsidian12.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${key}`);
         return;
       }
       const skeleton = skeletonFor(type, period.start, this.config.journals[type].sections);
