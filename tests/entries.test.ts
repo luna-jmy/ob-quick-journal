@@ -71,6 +71,25 @@ describe("标题区内容条目抽取", () => {
 	});
 });
 
+describe("归档标识（[archive:: …]）", () => {
+	const NOTE = [
+		"# 日志",
+		"## 💡 灵感与思考",
+		"- 08:44 普通条目",
+		"- 09:00 已归档条目 [archive:: true]",
+		"- [ ] 未归档任务 [archive::]",
+	].join("\n");
+	const SECTIONS: JournalSection[] = [
+		{ id: "ideas", heading: "## 💡 灵感与思考", type: "list", fields: [] },
+	];
+
+	it("带归档标识的条目不进面板；无标识条目不受影响", () => {
+		const entries = collectEntries("2026-09-26", NOTE.split("\n"), SECTIONS);
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toMatchObject({ time: "08:44", text: "普通条目" });
+	});
+});
+
 describe("时间戳与段落", () => {
 	const NOTE = [
 		"# 2026-09-25 日志",

@@ -166,7 +166,7 @@ export class PanelView extends ItemView {
 		const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
 		rollBtn.type = "button";
 		rollBtn.setAttribute("aria-label", t("滚动未完成任务"));
-		setIcon(rollBtn, "arrow-down-up");
+		setIcon(rollBtn, "calendar-clock");
 		rollBtn.onclick = () => void this.rollover();
 
 		const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
@@ -211,7 +211,10 @@ export class PanelView extends ItemView {
 				Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
 			);
 			dropdown.setValue(this.targetId);
-			dropdown.onChange((value) => (this.targetId = value));
+			dropdown.onChange((value) => {
+				this.targetId = value;
+				updateHint();
+			});
 		} else {
 			top.createSpan({
 				cls: "qj-composer-target",
@@ -229,14 +232,28 @@ export class PanelView extends ItemView {
 		};
 		input.addEventListener("input", grow);
 		input.addEventListener("keydown", (evt) => {
-			if (evt.key === "Enter" && !evt.shiftKey) {
+			if (evt.key !== "Enter") return;
+			const target = targets.find((s) => s.id === this.targetId) ?? targets[0];
+			if (!evt.shiftKey) {
 				evt.preventDefault();
 				void this.send();
+				return;
 			}
+			// 列表不支持换行：多行内容面板无法按行识别，只有段落可以 Shift+Enter
+			if (target.type !== "paragraph") evt.preventDefault();
 		});
 
 		const foot = box.createDiv({ cls: "qj-composer-foot" });
-		foot.createSpan({ cls: "qj-composer-hint", text: t("Enter 发送 · Shift+Enter 换行") });
+		const hint = foot.createSpan({ cls: "qj-composer-hint" });
+		const updateHint = () => {
+			const target = targets.find((s) => s.id === this.targetId) ?? targets[0];
+			hint.setText(
+				target.type === "paragraph"
+					? t("Enter 发送 · Shift+Enter 换行")
+					: t("Enter 发送"),
+			);
+		};
+		updateHint();
 		const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
 		send.type = "button";
 		setIcon(send.createSpan({ cls: "qj-btn-icon" }), "send");
@@ -270,10 +287,14 @@ export class PanelView extends ItemView {
 	}
 
 	private async send(): Promise<void> {
-		const value = this.inputEl?.value.trim() ?? "";
-		if (value === "") return;
+		const raw = this.inputEl?.value ?? "";
+		if (raw.trim() === "") return;
 		const section = this.writableSections().find((s) => s.id === this.targetId);
 		if (!section) return;
+		// 列表条目按行识别：粘贴/输入的多行内容压成单行；段落保留换行
+		const value =
+			section.type === "paragraph" ? raw.trim() : raw.replace(/\s*\n+\s*/g, " ").trim();
+		if (value === "") return;
 		if (this.inputEl) this.inputEl.value = "";
 
 		if (section.type === "paragraph") {
@@ -414,11 +435,18 @@ export class PanelView extends ItemView {
 		if (entry.time) meta.createSpan({ cls: "qj-feed-time", text: entry.time });
 
 		const actions = head.createDiv({ cls: "qj-feed-actions" });
-		// 列表行：任务/列表互转
+		// 列表行：任务/列表互转、归档（行尾 [archive:: true]，面板隐藏）
 		if (entry.kind === "line") {
 			this.actionButton(actions, "repeat", t("任务/列表互转"), () => {
 				void (async () => {
 					const r = await this.plugin.capture.convertEntry(section, entry);
+					if (!r.ok) new Notice(this.entryError(r.message));
+					await this.loadFeed();
+				})();
+			});
+			this.actionButton(actions, "archive", t("归档"), () => {
+				void (async () => {
+					const r = await this.plugin.capture.archiveEntry(section, entry);
 					if (!r.ok) new Notice(this.entryError(r.message));
 					await this.loadFeed();
 				})();

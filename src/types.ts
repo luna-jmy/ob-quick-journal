@@ -64,7 +64,7 @@ export interface QJConfig {
 	viewLocations: { summary: ViewLocation; panel: ViewLocation };
 	/** 速记面板偏好 */
 	panel: { showCompleted: boolean };
-	/** 未完成任务滚动：哪些勾选框字符算「未完成」（可多选，默认空格 + > 与脚本一致） */
+	/** 未完成任务滚动：除空格外计入未完成的勾选框字符（空格始终隐含包含） */
 	rollover: { openMarkers: string[] };
 }
 
@@ -183,7 +183,7 @@ export const DEFAULT_CONFIG: QJConfig = {
 	summaryQueries: [],
 	viewLocations: { summary: "tab", panel: "tab" },
 	panel: { showCompleted: true },
-	rollover: { openMarkers: [" ", ">"] },
+	rollover: { openMarkers: [">"] },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -295,8 +295,11 @@ export function mergeConfig(saved: unknown): QJConfig {
 	}
 	if (isRecord(saved.rollover) && Array.isArray(saved.rollover.openMarkers)) {
 		const markers = saved.rollover.openMarkers as unknown[];
-		const cleaned = markers.filter((m): m is string => typeof m === "string" && m.length === 1);
-		if (cleaned.length > 0) base.rollover.openMarkers = cleaned;
+		// 空格是隐含标配，不存配置（旧配置里带空格的自动剔除）
+		const cleaned = markers.filter(
+			(m): m is string => typeof m === "string" && m.length === 1 && m !== " ",
+		);
+		base.rollover.openMarkers = cleaned;
 	}
 	return base;
 }

@@ -982,10 +982,14 @@
 	border-style: dashed;
 }
 
-.qj-journal-tabs {
+.qj-tabs {
 	display: flex;
 	gap: var(--size-2-2);
 	margin: var(--size-4-3) 0 var(--size-2-3);
+}
+
+.qj-tabs--inner {
+	margin-top: 0;
 }
 
 .qj-trend-select {

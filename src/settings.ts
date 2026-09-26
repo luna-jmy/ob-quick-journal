@@ -1,6 +1,7 @@
 /**
- * 设置页：语言 / 打开位置 / 模板识别 + 按「日志类型」分 tab 的目录与标题区编辑器
- * （日 / 周 / 月 / 年各自配置；周/月/年复盘即对应类型下的 text 标题区）。
+ * 设置页（布局参考 Project Master：分 tab、一类一页、记住所在页）。
+ * 通用：语言 / 视图打开位置 / 重置；日志：日/周/月/年各自目录与标题区；
+ * 速记面板：显示已完成、滚动未完成标识。
  * 注意：设置对象字段名是 config（§4.8）。
  */
 
@@ -26,20 +27,54 @@ const SECTION_TYPE_LABEL: Record<SectionType, string> = {
 	paragraph: "段落",
 };
 
+type SettingsTabId = "general" | "journals" | "panel";
+
 export class QJSettingTab extends PluginSettingTab {
-	private tab: PeriodType = "daily";
+	private settingsTab: SettingsTabId = "general";
+	private journalTab: PeriodType = "daily";
 
 	constructor(app: App, private plugin: QuickJournalPlugin) {
 		super(app, plugin);
 	}
 
 	display(): void {
-		// 结构性变更（增删标题区/字段、类型切换等）需要整页重绘——
-		// 记住滚动位置，画完恢复，否则每次改动都跳回顶部
+		// 结构性变更需要整页重绘——记住滚动位置，画完恢复，否则每次改动都跳回顶部
 		const scroller = this.containerEl.closest(".vertical-tab-content");
 		const scrollTop = scroller?.scrollTop ?? 0;
 		this.containerEl.empty();
 
+		this.renderTabBar();
+
+		if (this.settingsTab === "general") this.renderGeneral();
+		else if (this.settingsTab === "journals") this.renderJournals();
+		else this.renderPanel();
+
+		if (scroller !== null && scrollTop > 0) scroller.scrollTop = scrollTop;
+	}
+
+	private renderTabBar(): void {
+		const tabs = this.containerEl.createDiv({ cls: "qj-tabs" });
+		const items: { id: SettingsTabId; label: string }[] = [
+			{ id: "general", label: t("通用") },
+			{ id: "journals", label: t("日志") },
+			{ id: "panel", label: t("速记面板") },
+		];
+		for (const item of items) {
+			const btn = tabs.createEl("button", {
+				cls: `qj-btn${this.settingsTab === item.id ? " is-active" : ""}`,
+				text: item.label,
+			});
+			btn.type = "button";
+			btn.onclick = () => {
+				this.settingsTab = item.id;
+				this.display();
+			};
+		}
+	}
+
+	// ── 通用 ────────────────────────────────────────────────────────────────
+
+	private renderGeneral(): void {
 		new Setting(this.containerEl)
 			.setName(t("界面语言"))
 			.addDropdown((drop) => {
@@ -57,61 +92,20 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(this.containerEl).setName(t("速记面板")).setHeading();
-		new Setting(this.containerEl)
-			.setName(t("显示已完成任务"))
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
-					this.plugin.config.panel.showCompleted = value;
-					await this.plugin.saveConfig();
-				}),
-			);
-		new Setting(this.containerEl)
-			.setName(t("未完成任务标识"))
-			.setDesc(t("滚动时计入未完成的勾选框字符，逗号分隔；␣ 表示空格"))
-			.addText((text) => {
-				text.setPlaceholder("␣,>");
-				text.setValue(
-					this.plugin.config.rollover.openMarkers.map((m) => (m === " " ? "␣" : m)).join(","),
-				);
-				text.onChange(async (value) => {
-					const markers = value
-						.split(",")
-						.map((token) => (token === "␣" ? " " : token))
-						.filter((token) => token.length === 1);
-					if (markers.length > 0) {
-						this.plugin.config.rollover.openMarkers = markers;
-						await this.plugin.saveConfig();
-					}
-				});
-			});
-
 		new Setting(this.containerEl).setName(t("打开位置")).setHeading();
-		new Setting(this.containerEl)
-			.setName(t("日志汇总"))
-			.addDropdown((drop) => {
-				drop.addOption("tab", t("标签页"));
-				drop.addOption("sidebar", t("右侧边栏"));
-				drop.setValue(this.plugin.config.viewLocations.summary);
-				drop.onChange(async (value) => {
-					this.plugin.config.viewLocations.summary = value as ViewLocation;
-					await this.plugin.saveConfig();
+		for (const key of ["summary", "panel"] as const) {
+			new Setting(this.containerEl)
+				.setName(t(key === "summary" ? "日志汇总" : "速记面板"))
+				.addDropdown((drop) => {
+					drop.addOption("tab", t("标签页"));
+					drop.addOption("sidebar", t("右侧边栏"));
+					drop.setValue(this.plugin.config.viewLocations[key]);
+					drop.onChange(async (value) => {
+						this.plugin.config.viewLocations[key] = value as ViewLocation;
+						await this.plugin.saveConfig();
+					});
 				});
-			});
-		new Setting(this.containerEl)
-			.setName(t("速记面板"))
-			.addDropdown((drop) => {
-				drop.addOption("tab", t("标签页"));
-				drop.addOption("sidebar", t("右侧边栏"));
-				drop.setValue(this.plugin.config.viewLocations.panel);
-				drop.onChange(async (value) => {
-					this.plugin.config.viewLocations.panel = value as ViewLocation;
-					await this.plugin.saveConfig();
-				});
-			});
-
-		this.renderJournalTabs();
-		this.renderCurrentJournal();
+		}
 
 		this.containerEl.createEl("p", {
 			cls: "qj-setting-note",
@@ -136,28 +130,25 @@ export class QJSettingTab extends PluginSettingTab {
 					).open();
 				}),
 		);
-		if (scroller !== null && scrollTop > 0) scroller.scrollTop = scrollTop;
 	}
 
-	/** 日/周/月/年 tab 切换。 */
-	private renderJournalTabs(): void {
-		const tabs = this.containerEl.createDiv({ cls: "qj-journal-tabs" });
+	// ── 日志（日/周/月/年） ──────────────────────────────────────────────────
+
+	private renderJournals(): void {
+		const tabs = this.containerEl.createDiv({ cls: "qj-tabs qj-tabs--inner" });
 		for (const type of ["daily", "weekly", "monthly", "annual"] as PeriodType[]) {
 			const btn = tabs.createEl("button", {
-				cls: `qj-btn${this.tab === type ? " is-active" : ""}`,
+				cls: `qj-btn${this.journalTab === type ? " is-active" : ""}`,
 				text: t(TYPE_LABEL[type]),
 			});
 			btn.type = "button";
 			btn.onclick = () => {
-				this.tab = type;
+				this.journalTab = type;
 				this.display();
 			};
 		}
-	}
 
-	private renderCurrentJournal(): void {
-		const journal = this.plugin.config.journals[this.tab];
-
+		const journal = this.plugin.config.journals[this.journalTab];
 		new Setting(this.containerEl)
 			.setName(t("日志目录"))
 			.addText((text) => {
@@ -169,7 +160,7 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			});
 
-		if (this.tab === "daily") {
+		if (this.journalTab === "daily") {
 			new Setting(this.containerEl)
 				.setName(t("模板笔记"))
 				.setDesc(t("从模板识别说明"))
@@ -246,13 +237,7 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			})
 			.addDropdown((drop) => {
-				for (const type of [
-					"checkin",
-					"data",
-					"text",
-					"list",
-					"paragraph",
-				] as SectionType[]) {
+				for (const type of ["checkin", "data", "text", "list", "paragraph"] as SectionType[]) {
 					drop.addOption(type, t(SECTION_TYPE_LABEL[type]));
 				}
 				drop.setValue(section.type);
@@ -271,7 +256,10 @@ export class QJSettingTab extends PluginSettingTab {
 			);
 
 		// 速记面板相关开关仅对日日志有意义（面板只聚合 daily）
-		if (this.tab === "daily" && (section.type === "list" || section.type === "text" || section.type === "paragraph")) {
+		if (
+			this.journalTab === "daily" &&
+			(section.type === "list" || section.type === "text" || section.type === "paragraph")
+		) {
 			new Setting(container)
 				.setName(t("开启内容汇总面板"))
 				.setDesc(t("在速记面板里聚合显示该标题区的内容"))
@@ -283,8 +271,7 @@ export class QJSettingTab extends PluginSettingTab {
 					}),
 				);
 		}
-		if (this.tab === "daily" && (section.type === "list" || section.type === "paragraph")) {
-			// 时间戳只在面板开启后可用（面板负责解析显示）
+		if (this.journalTab === "daily" && (section.type === "list" || section.type === "paragraph")) {
 			new Setting(container)
 				.setName(t("自动添加时间戳"))
 				.setDesc(t("记录时自动加时间戳前缀（HH:mm），速记面板会解析并显示"))
@@ -360,5 +347,34 @@ export class QJSettingTab extends PluginSettingTab {
 					this.display();
 				}),
 		);
+	}
+
+	// ── 速记面板 ────────────────────────────────────────────────────────────
+
+	private renderPanel(): void {
+		new Setting(this.containerEl)
+			.setName(t("显示已完成任务"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
+					this.plugin.config.panel.showCompleted = value;
+					await this.plugin.saveConfig();
+				}),
+			);
+
+		new Setting(this.containerEl)
+			.setName(t("未完成任务标识"))
+			.setDesc(t("滚动时计入未完成的勾选框字符（空格始终包含），逗号分隔"))
+			.addText((text) => {
+				text.setPlaceholder(">,/");
+				text.setValue(this.plugin.config.rollover.openMarkers.join(","));
+				text.onChange(async (value) => {
+					const markers = value
+						.split(",")
+						.map((token) => token.trim())
+						.filter((token) => token.length === 1 && token !== " ");
+					this.plugin.config.rollover.openMarkers = markers;
+					await this.plugin.saveConfig();
+				});
+			});
 	}
 }

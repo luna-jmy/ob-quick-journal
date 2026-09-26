@@ -161,6 +161,11 @@ export class CaptureService {
 		return this.rewriteRawLine(entry, convertListTask);
 	}
 
+	/** 归档（面板隐藏）：行尾追加 [archive:: true]（dataview 内联字段，可被外部识别）。 */
+	async archiveEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
+		return this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
+	}
+
 	private entryPath(entry: SectionEntry): string {
 		return `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
 	}

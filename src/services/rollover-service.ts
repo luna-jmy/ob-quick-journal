@@ -29,6 +29,11 @@ export class RolloverService {
 		private getConfig: () => QJConfig,
 	) {}
 
+	/** 完整标记集 = 空格（隐含标配）+ 配置的额外标识。 */
+	private markers(): string[] {
+		return [" ", ...this.getConfig().rollover.openMarkers];
+	}
+
 	private dir(type: PeriodType): string {
 		return this.getConfig().journals[type].dir.replace(/\/+$/, "");
 	}
@@ -39,7 +44,7 @@ export class RolloverService {
 
 	/** 往回找最近一期有未完成任务的日日志（不含今天）。 */
 	async preview(now: Date): Promise<RolloverPreview | null> {
-		const markers = this.getConfig().rollover.openMarkers;
+		const markers = this.markers();
 		const cursor = new Date(now);
 		for (let i = 0; i < MAX_LOOKBACK; i++) {
 			cursor.setDate(cursor.getDate() - 1);
@@ -98,7 +103,7 @@ export class RolloverService {
 		await applyPlanToFile(this.app, todayPath, plan);
 
 		// 3. 源文件删除（原子，标记集与预览一致）
-		const markers = this.getConfig().rollover.openMarkers;
+		const markers = this.markers();
 		const sourceFile = this.app.vault.getAbstractFileByPath(preview.sourcePath);
 		if (!(sourceFile instanceof TFile)) {
 			return { ok: false, message: `note not found: ${preview.sourcePath}` };

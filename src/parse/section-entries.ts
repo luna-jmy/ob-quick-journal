@@ -38,12 +38,21 @@ const BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
 const LIST_ITEM_RE = /^\s*[-*]\s+(.*)$/;
 const TASK_ITEM_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
 const TIMESTAMP_RE = /^(\d{1,2}:\d{2})(?::\d{2})?\s+/;
+/** 归档标识：行尾 dataview 内联字段（[archive:: true] / [archive::]），面板隐藏该条 */
+const ARCHIVE_RE = /\s*\[archive::\s*[^\]]*?\]\s*$/;
 
 /** 剥离内容前的 HH:mm 时间戳（开启自动时间戳的写入带它）。 */
 function splitTimestamp(text: string): { time?: string; text: string } {
 	const m = TIMESTAMP_RE.exec(text);
 	if (!m) return { text };
 	return { time: m[1], text: text.slice(m[0].length) };
+}
+
+/** 剥离行尾归档标识；archived = 是否带标识。 */
+export function stripArchive(line: string): { line: string; archived: boolean } {
+	const m = ARCHIVE_RE.exec(line);
+	if (!m) return { line, archived: false };
+	return { line: line.slice(0, m.index).trimEnd(), archived: true };
 }
 
 function taskPrefix(status: string): string {
@@ -98,13 +107,17 @@ export function collectEntries(
 		}
 
 		for (let i = start; i < end; i++) {
-			const line = lines[i];
-			if (line.trimStart().startsWith("```")) {
+			const raw = lines[i];
+			if (raw.trimStart().startsWith("```")) {
 				inFence = !inFence;
 				continue;
 			}
 			if (inFence) continue;
-			if (line.trimStart().startsWith("%%")) continue;
+			if (raw.trimStart().startsWith("%%")) continue;
+
+			// 归档条目（行尾 [archive:: …]）不进面板；解析用剥离后的行
+			const { line, archived } = stripArchive(raw);
+			if (archived) continue;
 
 			const field = BRACKET_FIELD_RE.exec(line);
 			if (field) {

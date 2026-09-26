@@ -71,8 +71,8 @@ export const EN: Record<string, string> = {
 	"收起录入": "Hide capture bar",
 	"显示已完成任务": "Show completed tasks",
 	"未完成任务标识": "Unfinished task markers",
-	"滚动时计入未完成的勾选框字符，逗号分隔；␣ 表示空格":
-		"Checkbox characters treated as unfinished when rolling over (comma-separated; ␣ means space)",
+	"滚动时计入未完成的勾选框字符（空格始终包含），逗号分隔":
+		"Checkbox characters treated as unfinished when rolling over (space is always included), comma-separated",
 	"滚动未完成任务": "Roll over unfinished tasks",
 	"移动未完成任务": "Move unfinished tasks",
 	"来自": "From",
@@ -81,6 +81,10 @@ export const EN: Record<string, string> = {
 	"已移动": "Moved",
 	"移动": "Move",
 	"Enter 发送 · Shift+Enter 换行": "Enter to send · Shift+Enter for a new line",
+	"Enter 发送": "Enter to send",
+	"归档": "Archive",
+	"通用": "General",
+	"日志": "Journals",
 	"需要 Dataview 渲染": "Requires the Dataview plugin",
 	"需要 Tasks 渲染": "Requires the Tasks plugin",
 	"渲染失败": "Failed to render",
