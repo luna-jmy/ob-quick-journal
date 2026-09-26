@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-26T06:07:54.573Z */
+/* Quick Journal — bundled 2026-09-26T14:51:39.925Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -150,6 +150,7 @@ var DEFAULT_CONFIG = {
   summaryQueries: [],
   viewLocations: { summary: "tab", panel: "tab" },
   panel: { showCompleted: true },
+  stats: { includeNonDailyTasks: true },
   rollover: { openMarkers: [">"] }
 };
 function isRecord(v) {
@@ -258,6 +259,11 @@ function mergeConfig(saved) {
     );
     base.rollover.openMarkers = cleaned;
   }
+  if (isRecord(saved.stats)) {
+    if (typeof saved.stats.includeNonDailyTasks === "boolean") {
+      base.stats.includeNonDailyTasks = saved.stats.includeNonDailyTasks;
+    }
+  }
   return base;
 }
 
@@ -344,6 +350,12 @@ var EN = {
   "\u5F52\u6863": "Archive",
   "\u901A\u7528": "General",
   "\u65E5\u5FD7": "Journals",
+  "\u7EDF\u8BA1": "Statistics",
+  "\u975Edaily\u4EFB\u52A1\u8BA1\u6570": "Count non-daily tasks",
+  "\u5305\u542B\u5468/\u6708/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09": "Include tasks from weekly/monthly/annual journals (by \u2705 date, falling back to the period start)",
+  "\u6DFB\u52A0\u9644\u4EF6": "Add attachment",
+  "\u4FDD\u5B58\u4FEE\u6539": "Save changes",
+  "\u5B63\u5EA6": "Quarter",
   "\u542B\u5B50\u76EE\u5F55\uFF0C\u9012\u5F52\u8BC6\u522B": "Subfolders included (recursive)",
   "\u6587\u4EF6\u540D\u683C\u5F0F": "Filename format",
   "\u6587\u4EF6\u540D\u683C\u5F0F\u8BF4\u660E": "Target note filename, moment-style tokens (YYYY MM DD ww and [literals]); docs:",
@@ -739,6 +751,14 @@ function periodOf(kind, d) {
     const days2 = Array.from({ length: n }, (_, i) => addDays(start2, i));
     return { kind, key: monthKey(d), start: start2, days: days2 };
   }
+  if (kind === "quarter") {
+    const q = Math.floor(d.getMonth() / 3) + 1;
+    const start2 = new Date(d.getFullYear(), (q - 1) * 3, 1);
+    const end2 = new Date(d.getFullYear(), q * 3, 0);
+    const days2 = [];
+    for (let cur = start2; cur <= end2; cur = addDays(cur, 1)) days2.push(new Date(cur));
+    return { kind, key: `${d.getFullYear()}-Q${q}`, start: start2, days: days2 };
+  }
   const start = new Date(d.getFullYear(), 0, 1);
   const end = new Date(d.getFullYear(), 11, 31);
   const days = [];
@@ -754,6 +774,8 @@ function periodFromKey(key) {
     const start = mondayOfIsoWeek(year, week);
     return periodOf("week", start);
   }
+  const q = /^(\d{4})-Q([1-4])$/.exec(key);
+  if (q) return periodOf("quarter", new Date(Number(q[1]), (Number(q[2]) - 1) * 3, 1));
   const m = /^(\d{4})-(\d{2})$/.exec(key);
   if (m) return periodOf("month", new Date(Number(m[1]), Number(m[2]) - 1, 1));
   const y = /^(\d{4})$/.exec(key);
@@ -767,6 +789,10 @@ function shiftPeriod(period, step) {
   if (period.kind === "month") {
     const d = new Date(period.start.getFullYear(), period.start.getMonth() + step, 1);
     return periodOf("month", d);
+  }
+  if (period.kind === "quarter") {
+    const d = new Date(period.start.getFullYear(), period.start.getMonth() + step * 3, 1);
+    return periodOf("quarter", d);
   }
   return periodOf("year", new Date(period.start.getFullYear() + step, 0, 1));
 }
@@ -951,10 +977,10 @@ function collectEntries(date, lines, sections) {
         const line = lines[i];
         if (line.trimStart().startsWith("```")) {
           inFence = !inFence;
+          content.push(line.trimEnd());
           continue;
         }
-        if (inFence) continue;
-        if (line.trimStart().startsWith("%%")) continue;
+        if (!inFence && line.trimStart().startsWith("%%")) continue;
         content.push(line.trimEnd());
       }
       while (content.length > 0 && content[0] === "") content.shift();
@@ -1044,9 +1070,10 @@ function collectEntries(date, lines, sections) {
 
 // src/services/vault-index.ts
 var VaultIndex = class {
-  constructor(app, dailyDir) {
+  constructor(app, dailyDir, extraTaskDirs = []) {
     this.app = app;
     this.dailyDir = dailyDir;
+    this.extraTaskDirs = extraTaskDirs;
   }
   filesUnder(dir) {
     const prefix = dir.replace(/\/+$/, "") + "/";
@@ -1074,7 +1101,32 @@ var VaultIndex = class {
       const taskLines = text.split(/\r?\n/).filter((l) => /^\s*[-*]\s+\[([ xX/-])\]/.test(l));
       records.set(key, { date: key, fieldValues: fields, taskLines });
     }
+    await this.appendNonDailyTasks(records, daySet);
     return { records, mtimeFallback };
+  }
+  /**
+   * 非 daily 日志（周/月/年）的任务行并入统计：✅ 日期优先归属，无日期按期间起始日
+   * （周=周一、月/年=首日）。只在 daySet 覆盖的日期上生效，期间外自动忽略。
+   */
+  async appendNonDailyTasks(records, daySet) {
+    if (this.extraTaskDirs.length === 0) return;
+    for (const dir of this.extraTaskDirs) {
+      for (const file of this.filesUnder(dir)) {
+        const period = parseNoteDateKind(file.name);
+        if (period === null || period.kind === "day") continue;
+        const text = await this.app.vault.cachedRead(file);
+        for (const line of text.split(/\r?\n/)) {
+          if (!/^\s*[-*]\s+\[([ xX/-])\]/.test(line)) continue;
+          const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
+          const fallback = periodFromKey(period.key);
+          const target = done !== null && daySet.has(done[1]) ? done[1] : fallback !== null && daySet.has(dateKey(fallback.start)) ? dateKey(fallback.start) : null;
+          if (target === null) continue;
+          const record = records.get(target);
+          if (record) record.taskLines.push(line);
+          else records.set(target, { date: target, fieldValues: {}, taskLines: [line] });
+        }
+      }
+    }
   }
   /** 速记面板用：期间逐日的标题区内容条目（只采集，不做判断）。 */
   async collectEntries(days, sections) {
@@ -1699,7 +1751,7 @@ function renderTaskChart(card, ctx, metrics, done) {
     cell.createSpan({ cls: "qj-metric-value", text: m.value });
     cell.createSpan({ cls: "qj-metric-label", text: m.label });
   }
-  const data = ctx.kind === "year" ? Array.from({ length: 12 }, (_, m) => {
+  const data = ctx.kind === "year" || ctx.kind === "quarter" ? Array.from({ length: 12 }, (_, m) => {
     let sum = 0;
     for (const [day, n] of done) {
       if (Number(day.slice(5, 7)) - 1 === m) sum += n;
@@ -2011,21 +2063,7 @@ async function renderQueryPanel(card, app, ctx) {
 function renderQueryEditor(card, ctx) {
   const config = ctx.plugin.config;
   const rerender = ctx.rerender;
-  for (const q of [...config.summaryQueries]) {
-    const row = card.createDiv({ cls: "qj-query-edit-row" });
-    if (q.title) row.createSpan({ cls: "qj-query-title", text: q.title });
-    row.createSpan({ cls: "qj-query-chip", text: q.kind });
-    row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
-    const del = row.createEl("button", { cls: "qj-feed-btn" });
-    del.type = "button";
-    del.setAttribute("aria-label", t("\u5220\u9664"));
-    del.setText("\u2715");
-    del.onclick = async () => {
-      config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
-      await ctx.plugin.saveConfig();
-      rerender();
-    };
-  }
+  let editIndex = -1;
   const add = card.createDiv({ cls: "qj-query-add" });
   const titleInput = add.createEl("input", { cls: "qj-input", type: "text" });
   titleInput.placeholder = t("\u67E5\u8BE2\u6807\u9898");
@@ -2038,17 +2076,52 @@ function renderQueryEditor(card, ctx) {
   code.placeholder = t("\u67E5\u8BE2\u8BED\u53E5");
   const btn = add.createEl("button", { cls: "qj-btn", text: t("\u6DFB\u52A0\u67E5\u8BE2") });
   btn.type = "button";
+  const startEdit = (index) => {
+    var _a;
+    editIndex = index;
+    const q = config.summaryQueries[index];
+    if (!q) return;
+    titleInput.value = (_a = q.title) != null ? _a : "";
+    kindSel.value = q.kind;
+    code.value = q.code;
+    btn.setText(t("\u4FDD\u5B58\u4FEE\u6539"));
+  };
   btn.onclick = async () => {
     if (code.value.trim() === "") return;
     const title = titleInput.value.trim();
-    config.summaryQueries.push({
+    const entry = {
       ...title !== "" ? { title } : {},
       kind: kindSel.value,
       code: code.value.trim()
-    });
+    };
+    if (editIndex >= 0 && editIndex < config.summaryQueries.length) {
+      config.summaryQueries[editIndex] = entry;
+    } else {
+      config.summaryQueries.push(entry);
+    }
     await ctx.plugin.saveConfig();
     rerender();
   };
+  for (const [index, q] of [...config.summaryQueries].entries()) {
+    const row = card.createDiv({ cls: "qj-query-edit-row" });
+    if (q.title) row.createSpan({ cls: "qj-query-title", text: q.title });
+    row.createSpan({ cls: "qj-query-chip", text: q.kind });
+    row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
+    const edit = row.createEl("button", { cls: "qj-feed-btn", text: "\u270E" });
+    edit.type = "button";
+    edit.setAttribute("aria-label", t("\u7F16\u8F91"));
+    edit.onclick = () => startEdit(index);
+    const del = row.createEl("button", { cls: "qj-feed-btn" });
+    del.type = "button";
+    del.setAttribute("aria-label", t("\u5220\u9664"));
+    del.setText("\u2715");
+    del.onclick = async () => {
+      config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
+      await ctx.plugin.saveConfig();
+      rerender();
+    };
+  }
+  card.appendChild(add);
 }
 
 // src/views/summary-view.ts
@@ -2056,6 +2129,7 @@ var VIEW_TYPE_QJ_SUMMARY = "qj-summary";
 var KIND_LABEL = {
   week: "\u5468",
   month: "\u6708",
+  quarter: "\u5B63\u5EA6",
   year: "\u5E74"
 };
 var SummaryView = class extends import_obsidian6.ItemView {
@@ -2080,7 +2154,9 @@ var SummaryView = class extends import_obsidian6.ItemView {
     return this.kind;
   }
   setViewData(data) {
-    if (data === "month" || data === "year" || data === "week") this.kind = data;
+    if (data === "month" || data === "year" || data === "week" || data === "quarter") {
+      this.kind = data;
+    }
   }
   async onOpen() {
     await this.render();
@@ -2093,7 +2169,7 @@ var SummaryView = class extends import_obsidian6.ItemView {
     await this.renderBody(root.createDiv({ cls: "qj-body" }));
   }
   renderToolbar(toolbar) {
-    for (const kind of ["week", "month", "year"]) {
+    for (const kind of ["week", "month", "quarter", "year"]) {
       const btn = toolbar.createEl("button", {
         cls: `qj-btn qj-kind-btn${kind === this.kind ? " is-active" : ""}`,
         text: t(KIND_LABEL[kind])
@@ -2175,7 +2251,12 @@ var SummaryView = class extends import_obsidian6.ItemView {
       {
         id: "task-heatmap",
         title: t("\u4EFB\u52A1\u5B8C\u6210\u70ED\u529B\u56FE"),
-        render: (card, ctx) => renderHeatmap(card, ctx, doneByDay(ctx.days, ctx.records), ctx.kind === "year")
+        render: (card, ctx) => renderHeatmap(
+          card,
+          ctx,
+          doneByDay(ctx.days, ctx.records),
+          ctx.kind === "year" || ctx.kind === "quarter"
+        )
       },
       {
         id: "entry-heatmap",
@@ -2186,7 +2267,7 @@ var SummaryView = class extends import_obsidian6.ItemView {
           for (const e of ctx.entries) {
             counts.set(e.date, ((_a = counts.get(e.date)) != null ? _a : 0) + 1);
           }
-          renderHeatmap(card, ctx, counts, ctx.kind === "year");
+          renderHeatmap(card, ctx, counts, ctx.kind === "year" || ctx.kind === "quarter");
         }
       },
       {
@@ -2206,7 +2287,8 @@ var SummaryView = class extends import_obsidian6.ItemView {
   }
   async renderBody(body) {
     const config = this.plugin.config;
-    const index = new VaultIndex(this.app, config.journals.daily.dir);
+    const extraDirs = config.stats.includeNonDailyTasks ? ["weekly", "monthly", "annual"].map((type) => config.journals[type].dir).filter((dir) => dir.trim() !== "") : [];
+    const index = new VaultIndex(this.app, config.journals.daily.dir, extraDirs);
     const days = this.period.days.map(dateKey);
     const records = (await index.collectDayRecords(this.period.days)).records;
     body.createDiv({ cls: "qj-period-header" }).createSpan({
@@ -2661,13 +2743,47 @@ var PanelView = class extends import_obsidian9.ItemView {
       hint.setText(
         target.type === "paragraph" ? t("Enter \u53D1\u9001 \xB7 Shift+Enter \u6362\u884C") : t("Enter \u53D1\u9001")
       );
+      attach.style.display = target.type === "paragraph" ? "" : "none";
     };
-    updateHint();
+    const attach = foot.createEl("button", { cls: "qj-btn qj-icon-btn" });
+    attach.type = "button";
+    attach.setAttribute("aria-label", t("\u6DFB\u52A0\u9644\u4EF6"));
+    (0, import_obsidian9.setIcon)(attach, "paperclip");
+    attach.onclick = () => {
+      const picker = box.ownerDocument.createElement("input");
+      picker.type = "file";
+      picker.accept = "image/*";
+      picker.onchange = () => {
+        var _a, _b;
+        return void this.insertAttachment((_b = (_a = picker.files) == null ? void 0 : _a[0]) != null ? _b : null, input);
+      };
+      picker.click();
+    };
     const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
     send.type = "button";
     (0, import_obsidian9.setIcon)(send.createSpan({ cls: "qj-btn-icon" }), "send");
     send.createSpan({ text: t("\u53D1\u9001") });
     send.onclick = () => void this.send();
+    updateHint();
+  }
+  /** 附件写入 vault（走 Obsidian 附件路径规则），并把嵌入语法追加到输入框。 */
+  async insertAttachment(file, input) {
+    var _a;
+    if (file === null) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const source = this.plugin.capture.dailyPath(/* @__PURE__ */ new Date());
+      const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, source);
+      await this.app.vault.createBinary(path, buffer);
+      const embed = `![[${(_a = path.split("/").pop()) != null ? _a : path}]]
+`;
+      input.value = input.value.length > 0 ? `${input.value}
+${embed}` : embed;
+      input.dispatchEvent(new Event("input"));
+      new import_obsidian9.Notice(`${t("\u5DF2\u5199\u5165")} ${path}`);
+    } catch (error) {
+      new import_obsidian9.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   /** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
   async rollover() {
@@ -2803,6 +2919,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     }
   }
   renderItem(day, date, section, entry, name) {
+    var _a;
     const item = day.createDiv({ cls: "qj-feed-item" });
     const head = item.createDiv({ cls: "qj-feed-head" });
     const meta = head.createDiv({ cls: "qj-feed-meta" });
@@ -2843,7 +2960,22 @@ var PanelView = class extends import_obsidian9.ItemView {
     this.actionButton(actions, "pencil", t("\u7F16\u8F91"), () => this.editEntry(section, entry));
     this.actionButton(actions, "trash-2", t("\u5220\u9664"), () => this.deleteEntry(section, entry));
     this.actionButton(actions, "arrow-up-right", t("\u6253\u5F00\u65E5\u5FD7"), () => this.jumpTo(date));
-    item.createDiv({ cls: "qj-feed-text", text: entry.text });
+    if (entry.kind === "paragraph") {
+      const body = item.createDiv({ cls: "qj-feed-text qj-feed-text--md" });
+      const file = new VaultIndex(
+        this.app,
+        this.plugin.config.journals.daily.dir
+      ).dailyFile(entry.date);
+      void import_obsidian9.MarkdownRenderer.render(
+        this.app,
+        entry.text,
+        body,
+        (_a = file == null ? void 0 : file.path) != null ? _a : "",
+        this
+      );
+    } else {
+      item.createDiv({ cls: "qj-feed-text", text: entry.text });
+    }
   }
   actionButton(parent, icon, label, onClick) {
     const btn = parent.createEl("button", { cls: "qj-feed-btn" });
@@ -3025,6 +3157,13 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
   }
   // ── 通用 ────────────────────────────────────────────────────────────────
   renderGeneral() {
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u7EDF\u8BA1")).setHeading();
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u975Edaily\u4EFB\u52A1\u8BA1\u6570")).setDesc(t("\u5305\u542B\u5468/\u6708/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09")).addToggle(
+      (toggle) => toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
+        this.plugin.config.stats.includeNonDailyTasks = value;
+        await this.plugin.saveConfig();
+      })
+    );
     new import_obsidian10.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
       drop.addOption("zh", t("\u4E2D\u6587"));
