@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-26T14:51:39.925Z */
+/* Quick Journal — bundled 2026-09-26T15:22:51.094Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -947,6 +947,43 @@ function skeletonFor(type, now, sections, filenameFormat) {
   return lines.join("\n");
 }
 
+// src/parse/task-lines.ts
+var TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+function extractDate(mark, body) {
+  const re = new RegExp(`${mark}\\s*(\\d{4}-\\d{2}-\\d{2})`);
+  const m = re.exec(body);
+  return m ? m[1] : void 0;
+}
+function parseTaskLine(line) {
+  const m = TASK_RE.exec(line);
+  if (!m) return null;
+  const status = m[1];
+  const body = m[2];
+  return {
+    line,
+    done: status === "x" || status === "X",
+    doneDate: extractDate("\u2705", body),
+    createdDate: extractDate("\u2795", body)
+  };
+}
+function parseTaskLines(lines) {
+  return lines.map((l) => parseTaskLine(l)).filter((t2) => t2 !== null);
+}
+var ANY_TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]/;
+function collectTaskLines(lines) {
+  const out = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (line.trimStart().startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (ANY_TASK_RE.test(line)) out.push(line);
+  }
+  return out;
+}
+
 // src/parse/section-entries.ts
 var BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
 var LIST_ITEM_RE = /^\s*[-*]\s+(.*)$/;
@@ -1098,7 +1135,7 @@ var VaultIndex = class {
       for (const fl of parseFieldLines(text.split(/\r?\n/))) {
         if (!(fl.key in fields)) fields[fl.key] = fl.value;
       }
-      const taskLines = text.split(/\r?\n/).filter((l) => /^\s*[-*]\s+\[([ xX/-])\]/.test(l));
+      const taskLines = collectTaskLines(text.split(/\r?\n/));
       records.set(key, { date: key, fieldValues: fields, taskLines });
     }
     await this.appendNonDailyTasks(records, daySet);
@@ -1115,8 +1152,7 @@ var VaultIndex = class {
         const period = parseNoteDateKind(file.name);
         if (period === null || period.kind === "day") continue;
         const text = await this.app.vault.cachedRead(file);
-        for (const line of text.split(/\r?\n/)) {
-          if (!/^\s*[-*]\s+\[([ xX/-])\]/.test(line)) continue;
+        for (const line of collectTaskLines(text.split(/\r?\n/))) {
           const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
           const fallback = periodFromKey(period.key);
           const target = done !== null && daySet.has(done[1]) ? done[1] : fallback !== null && daySet.has(dateKey(fallback.start)) ? dateKey(fallback.start) : null;
@@ -1169,12 +1205,19 @@ var VaultIndex = class {
     return out.sort((a, b) => a.date < b.date ? 1 : -1);
   }
   resolveDate(file) {
-    var _a;
+    var _a, _b, _c;
     const cache = this.app.metadataCache.getFileCache(file);
     const fmDate = (_a = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _a["journal-date"];
-    if (typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate)) return fmDate;
     const name = parseNoteDateKind(file.name);
-    if ((name == null ? void 0 : name.kind) === "day") return name.key;
+    if ((name == null ? void 0 : name.kind) === "day") {
+      return typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate) ? fmDate : name.key;
+    }
+    const journal = (_b = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _b["journal"];
+    const type = (_c = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _c["type"];
+    const isDailyNote = journal === "Daily" || type === "daily_log";
+    if (isDailyNote && typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate)) {
+      return fmDate;
+    }
     return null;
   }
 };
@@ -1575,29 +1618,6 @@ var ActionPickerModal = class extends import_obsidian4.Modal {
 
 // src/views/summary-view.ts
 var import_obsidian6 = require("obsidian");
-
-// src/parse/task-lines.ts
-var TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
-function extractDate(mark, body) {
-  const re = new RegExp(`${mark}\\s*(\\d{4}-\\d{2}-\\d{2})`);
-  const m = re.exec(body);
-  return m ? m[1] : void 0;
-}
-function parseTaskLine(line) {
-  const m = TASK_RE.exec(line);
-  if (!m) return null;
-  const status = m[1];
-  const body = m[2];
-  return {
-    line,
-    done: status === "x" || status === "X",
-    doneDate: extractDate("\u2705", body),
-    createdDate: extractDate("\u2795", body)
-  };
-}
-function parseTaskLines(lines) {
-  return lines.map((l) => parseTaskLine(l)).filter((t2) => t2 !== null);
-}
 
 // src/metrics/aggregate.ts
 function boolStats(fields, days, records) {
@@ -3162,6 +3182,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       (toggle) => toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
         this.plugin.config.stats.includeNonDailyTasks = value;
         await this.plugin.saveConfig();
+        this.plugin.refreshSummaryViews();
       })
     );
     new import_obsidian10.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
@@ -3558,6 +3579,12 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     if (leaf === null) return;
     await leaf.setViewState({ type: viewType, active: true });
     await workspace.revealLeaf(leaf);
+  }
+  /** 设置变更后重算汇总视图（统计口径等改了，已打开的视图不会自己重渲染）。 */
+  refreshSummaryViews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QJ_SUMMARY)) {
+      if (leaf.view instanceof SummaryView) void leaf.view.render();
+    }
   }
   /** 打开某期间的日志/复盘笔记（递归子目录查找；不存在则按该类型建骨架到目录根）。月历入口用。 */
   async openPeriodNote(type, key) {

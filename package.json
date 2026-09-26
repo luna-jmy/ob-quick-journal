@@ -1,6 +1,6 @@
 {
   "name": "quick-journal",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Mobile-first quick capture for journals with weekly, monthly, and yearly summaries.",
   "main": "main.js",
   "type": "module",

@@ -5,6 +5,18 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.12.1
+
+### 修复
+
+- **关闭非daily计数后统计仍偏高**的三个来源：
+  1. 设置切换不刷新已打开的汇总视图（现在统计开关变更即触发重算）；
+  2. daily 目录的归期识别过宽——任何带 `journal-date` 的文件都计入；现在非
+     `YYYY-MM-DD.md` 文件名必须同时带 daily 身份标记（`journal: Daily` 或
+     `type: daily_log`）才计入，误放进日志目录的周记草稿等不再混入；
+  3. 任务行提取不跳过代码围栏——代码块里任务样式的行也被计数（daily 与非daily
+     两条路径统一改为围栏感知的 `collectTaskLines`）
+
 ## 0.12.0
 
 ### 新增
