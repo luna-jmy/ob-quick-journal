@@ -85,6 +85,13 @@ export const EN: Record<string, string> = {
 	"归档": "Archive",
 	"通用": "General",
 	"日志": "Journals",
+	"统计": "Statistics",
+	"非daily任务计数": "Count non-daily tasks",
+	"包含周/月/年日志中的任务（✅ 日期优先归属，无日期按期间起始日）":
+		"Include tasks from weekly/monthly/annual journals (by ✅ date, falling back to the period start)",
+	"添加附件": "Add attachment",
+	"保存修改": "Save changes",
+	"季度": "Quarter",
 	"含子目录，递归识别": "Subfolders included (recursive)",
 	"文件名格式": "Filename format",
 	"文件名格式说明": "Target note filename, moment-style tokens (YYYY MM DD ww and [literals]); docs:",

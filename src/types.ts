@@ -68,6 +68,8 @@ export interface QJConfig {
 	viewLocations: { summary: ViewLocation; panel: ViewLocation };
 	/** 速记面板偏好 */
 	panel: { showCompleted: boolean };
+	/** 统计偏好 */
+	stats: { includeNonDailyTasks: boolean };
 	/** 未完成任务滚动：除空格外计入未完成的勾选框字符（空格始终隐含包含） */
 	rollover: { openMarkers: string[] };
 }
@@ -200,6 +202,7 @@ export const DEFAULT_CONFIG: QJConfig = {
 	summaryQueries: [],
 	viewLocations: { summary: "tab", panel: "tab" },
 	panel: { showCompleted: true },
+	stats: { includeNonDailyTasks: true },
 	rollover: { openMarkers: [">"] },
 };
 
@@ -333,6 +336,11 @@ export function mergeConfig(saved: unknown): QJConfig {
 			(m): m is string => typeof m === "string" && m.length === 1 && m !== " ",
 		);
 		base.rollover.openMarkers = cleaned;
+	}
+	if (isRecord(saved.stats)) {
+		if (typeof saved.stats.includeNonDailyTasks === "boolean") {
+			base.stats.includeNonDailyTasks = saved.stats.includeNonDailyTasks;
+		}
 	}
 	return base;
 }

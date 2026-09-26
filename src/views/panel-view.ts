@@ -8,6 +8,7 @@
 import {
 	DropdownComponent,
 	ItemView,
+	MarkdownRenderer,
 	Notice,
 	TFile,
 	debounce,
@@ -241,13 +242,43 @@ export class PanelView extends ItemView {
 					? t("Enter 发送 · Shift+Enter 换行")
 					: t("Enter 发送"),
 			);
+			attach.style.display = target.type === "paragraph" ? "" : "none";
 		};
-		updateHint();
+		// 附件按钮（仅段落目标）：选图 → 存入 Obsidian 附件位置 → 光标处插入 ![[…]]
+		const attach = foot.createEl("button", { cls: "qj-btn qj-icon-btn" });
+		attach.type = "button";
+		attach.setAttribute("aria-label", t("添加附件"));
+		setIcon(attach, "paperclip");
+		attach.onclick = () => {
+			const picker = box.ownerDocument.createElement("input");
+			picker.type = "file";
+			picker.accept = "image/*";
+			picker.onchange = () => void this.insertAttachment(picker.files?.[0] ?? null, input);
+			picker.click();
+		};
 		const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
 		send.type = "button";
 		setIcon(send.createSpan({ cls: "qj-btn-icon" }), "send");
 		send.createSpan({ text: t("发送") });
 		send.onclick = () => void this.send();
+		updateHint();
+	}
+
+	/** 附件写入 vault（走 Obsidian 附件路径规则），并把嵌入语法追加到输入框。 */
+	private async insertAttachment(file: File | null, input: HTMLTextAreaElement): Promise<void> {
+		if (file === null) return;
+		try {
+			const buffer = await file.arrayBuffer();
+			const source = this.plugin.capture.dailyPath(new Date());
+			const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, source);
+			await this.app.vault.createBinary(path, buffer);
+			const embed = `![[${path.split("/").pop() ?? path}]]\n`;
+			input.value = input.value.length > 0 ? `${input.value}\n${embed}` : embed;
+			input.dispatchEvent(new Event("input"));
+			new Notice(`${t("已写入")} ${path}`);
+		} catch (error) {
+			new Notice(`${t("写入失败")}: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	}
 
 	/** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
@@ -445,7 +476,23 @@ export class PanelView extends ItemView {
 		this.actionButton(actions, "trash-2", t("删除"), () => this.deleteEntry(section, entry));
 		this.actionButton(actions, "arrow-up-right", t("打开日志"), () => this.jumpTo(date));
 
-		item.createDiv({ cls: "qj-feed-text", text: entry.text });
+		// 段落按 markdown 渲染（图片/代码块生效）并限高滚动；其余纯文本
+		if (entry.kind === "paragraph") {
+			const body = item.createDiv({ cls: "qj-feed-text qj-feed-text--md" });
+			const file = new VaultIndex(
+				this.app,
+				this.plugin.config.journals.daily.dir,
+			).dailyFile(entry.date);
+			void MarkdownRenderer.render(
+				this.app,
+				entry.text,
+				body,
+				file?.path ?? "",
+				this,
+			);
+		} else {
+			item.createDiv({ cls: "qj-feed-text", text: entry.text });
+		}
 	}
 
 	private actionButton(parent: HTMLElement, icon: string, label: string, onClick: () => void): void {

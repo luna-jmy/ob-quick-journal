@@ -4,7 +4,7 @@
  * 全部使用本地日期（与 vault 文件名口径一致），ISO 周算法内部用 UTC 技巧但不影响输入口径。
  */
 
-export type PeriodKind = "week" | "month" | "year";
+export type PeriodKind = "week" | "month" | "quarter" | "year";
 
 export interface Period {
 	kind: PeriodKind;
@@ -77,6 +77,14 @@ export function periodOf(kind: PeriodKind, d: Date): Period {
 		const days = Array.from({ length: n }, (_, i) => addDays(start, i));
 		return { kind, key: monthKey(d), start, days };
 	}
+	if (kind === "quarter") {
+		const q = Math.floor(d.getMonth() / 3) + 1;
+		const start = new Date(d.getFullYear(), (q - 1) * 3, 1);
+		const end = new Date(d.getFullYear(), q * 3, 0); // 季度最后一月的天数即末日
+		const days: Date[] = [];
+		for (let cur = start; cur <= end; cur = addDays(cur, 1)) days.push(new Date(cur));
+		return { kind, key: `${d.getFullYear()}-Q${q}`, start, days };
+	}
 	const start = new Date(d.getFullYear(), 0, 1);
 	const end = new Date(d.getFullYear(), 11, 31);
 	const days: Date[] = [];
@@ -84,7 +92,7 @@ export function periodOf(kind: PeriodKind, d: Date): Period {
 	return { kind, key: yearKey(d), start, days };
 }
 
-/** 期间键 → 期间（"2026-W39" / "2026-09" / "2026"）。解析失败返回 null。 */
+/** 期间键 → 期间（"2026-W39" / "2026-09" / "2026-Q3" / "2026"）。解析失败返回 null。 */
 export function periodFromKey(key: string): Period | null {
 	const w = /^(\d{4})-W(\d{2})$/.exec(key);
 	if (w) {
@@ -94,6 +102,8 @@ export function periodFromKey(key: string): Period | null {
 		const start = mondayOfIsoWeek(year, week);
 		return periodOf("week", start);
 	}
+	const q = /^(\d{4})-Q([1-4])$/.exec(key);
+	if (q) return periodOf("quarter", new Date(Number(q[1]), (Number(q[2]) - 1) * 3, 1));
 	const m = /^(\d{4})-(\d{2})$/.exec(key);
 	if (m) return periodOf("month", new Date(Number(m[1]), Number(m[2]) - 1, 1));
 	const y = /^(\d{4})$/.exec(key);
@@ -109,6 +119,10 @@ export function shiftPeriod(period: Period, step: number): Period {
 	if (period.kind === "month") {
 		const d = new Date(period.start.getFullYear(), period.start.getMonth() + step, 1);
 		return periodOf("month", d);
+	}
+	if (period.kind === "quarter") {
+		const d = new Date(period.start.getFullYear(), period.start.getMonth() + step * 3, 1);
+		return periodOf("quarter", d);
 	}
 	return periodOf("year", new Date(period.start.getFullYear() + step, 0, 1));
 }

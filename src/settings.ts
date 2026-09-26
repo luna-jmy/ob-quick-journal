@@ -75,6 +75,17 @@ export class QJSettingTab extends PluginSettingTab {
 	// ── 通用 ────────────────────────────────────────────────────────────────
 
 	private renderGeneral(): void {
+		new Setting(this.containerEl).setName(t("统计")).setHeading();
+		new Setting(this.containerEl)
+			.setName(t("非daily任务计数"))
+			.setDesc(t("包含周/月/年日志中的任务（✅ 日期优先归属，无日期按期间起始日）"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
+					this.plugin.config.stats.includeNonDailyTasks = value;
+					await this.plugin.saveConfig();
+				}),
+			);
+
 		new Setting(this.containerEl)
 			.setName(t("界面语言"))
 			.addDropdown((drop) => {

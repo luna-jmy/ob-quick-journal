@@ -6,7 +6,7 @@
 import { TFile, type App } from "obsidian";
 import { parseFieldLines } from "../parse/field-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
-import { parseNoteDateKind } from "../periods/period";
+import { parseNoteDateKind, periodFromKey } from "../periods/period";
 import { dateKey } from "../periods/period";
 import type { DayRecord } from "../metrics/day-record";
 import type { JournalSection } from "../types";
@@ -21,6 +21,8 @@ export class VaultIndex {
 	constructor(
 		private app: App,
 		private dailyDir: string,
+		/** 非 daily 日志目录（周/月/年）：开着「非daily任务计数」时其任务行并入统计 */
+		private extraTaskDirs: string[] = [],
 	) {}
 
 	private filesUnder(dir: string): TFile[] {
@@ -54,7 +56,41 @@ export class VaultIndex {
 				.filter((l) => /^\s*[-*]\s+\[([ xX/-])\]/.test(l));
 			records.set(key, { date: key, fieldValues: fields, taskLines });
 		}
+		await this.appendNonDailyTasks(records, daySet);
 		return { records, mtimeFallback };
+	}
+
+	/**
+	 * 非 daily 日志（周/月/年）的任务行并入统计：✅ 日期优先归属，无日期按期间起始日
+	 * （周=周一、月/年=首日）。只在 daySet 覆盖的日期上生效，期间外自动忽略。
+	 */
+	private async appendNonDailyTasks(
+		records: Map<string, DayRecord>,
+		daySet: Set<string>,
+	): Promise<void> {
+		if (this.extraTaskDirs.length === 0) return;
+		for (const dir of this.extraTaskDirs) {
+			for (const file of this.filesUnder(dir)) {
+				const period = parseNoteDateKind(file.name);
+				if (period === null || period.kind === "day") continue;
+				const text = await this.app.vault.cachedRead(file);
+				for (const line of text.split(/\r?\n/)) {
+					if (!/^\s*[-*]\s+\[([ xX/-])\]/.test(line)) continue;
+					const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
+					const fallback = periodFromKey(period.key);
+					const target =
+						done !== null && daySet.has(done[1])
+							? done[1]
+							: fallback !== null && daySet.has(dateKey(fallback.start))
+								? dateKey(fallback.start)
+								: null;
+					if (target === null) continue;
+					const record = records.get(target);
+					if (record) record.taskLines.push(line);
+					else records.set(target, { date: target, fieldValues: {}, taskLines: [line] });
+				}
+			}
+		}
 	}
 
 	/** 速记面板用：期间逐日的标题区内容条目（只采集，不做判断）。 */

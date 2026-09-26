@@ -492,6 +492,35 @@
 	word-break: break-word;
 }
 
+/* 段落按 markdown 渲染：限高滚动，图片/代码块/引用等正常呈现 */
+.qj-feed-text--md {
+	max-height: 16rem;
+	overflow-y: auto;
+	font-size: var(--font-ui-small);
+	border-radius: var(--radius-s);
+}
+
+.qj-feed-text--md img {
+	max-width: 100%;
+	border-radius: var(--radius-s);
+}
+
+.qj-feed-text--md pre {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.qj-feed-text--md code {
+	font-size: var(--font-ui-smaller);
+}
+
+.qj-feed-text--md blockquote {
+	margin: 0;
+	padding-left: var(--size-2-3);
+	border-left: 3px solid var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
 /* ── 速记面板工具栏扩展 ────────────────────────────────────────────────── */
 
 /* ── 顶部收起细栏（手机端把内容顶上来） ────────────────────────────────── */

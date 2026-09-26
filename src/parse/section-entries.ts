@@ -76,17 +76,17 @@ export function collectEntries(
 		let inFence = false;
 
 		if (section.type === "paragraph") {
-			// 一天一条：区段正文原样保留（含段内空行——编辑写回不改结构），
-			// 只跳过代码块与注释；首个非空行的时间戳前缀剥离为 time
+			// 一天一条：区段正文原样保留——空行、代码块（``` 围栏及其内容）、图片语法
+			// 全部进条目（编辑写回不清代码块）；只跳过 Obsidian 注释（%%…%%，围栏内不跳）
 			const content: string[] = [];
 			for (let i = start; i < end; i++) {
 				const line = lines[i];
 				if (line.trimStart().startsWith("```")) {
 					inFence = !inFence;
+					content.push(line.trimEnd());
 					continue;
 				}
-				if (inFence) continue;
-				if (line.trimStart().startsWith("%%")) continue;
+				if (!inFence && line.trimStart().startsWith("%%")) continue;
 				content.push(line.trimEnd());
 			}
 			while (content.length > 0 && content[0] === "") content.shift();

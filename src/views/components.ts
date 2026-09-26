@@ -76,7 +76,7 @@ export function renderTaskChart(
 	}
 
 	const data =
-		ctx.kind === "year"
+		ctx.kind === "year" || ctx.kind === "quarter"
 			? Array.from({ length: 12 }, (_, m) => {
 					let sum = 0;
 					for (const [day, n] of done) {
@@ -445,25 +445,11 @@ export async function renderQueryPanel(card: HTMLElement, app: App, ctx: Summary
 	}
 }
 
-/** 编辑模式下的查询配置：列表删除 + 新增（类型 + 语句）。 */
+/** 编辑模式下的查询配置：列表编辑/删除 + 新增（标题 + 类型 + 语句）。 */
 function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 	const config = ctx.plugin.config;
 	const rerender = ctx.rerender;
-	for (const q of [...config.summaryQueries]) {
-		const row = card.createDiv({ cls: "qj-query-edit-row" });
-		if (q.title) row.createSpan({ cls: "qj-query-title", text: q.title });
-		row.createSpan({ cls: "qj-query-chip", text: q.kind });
-		row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
-		const del = row.createEl("button", { cls: "qj-feed-btn" });
-		del.type = "button";
-		del.setAttribute("aria-label", t("删除"));
-		del.setText("✕");
-		del.onclick = async () => {
-			config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
-			await ctx.plugin.saveConfig();
-			rerender();
-		};
-	}
+	let editIndex = -1; // ≥0 时表单处于编辑态，保存时替换该条
 	const add = card.createDiv({ cls: "qj-query-add" });
 	const titleInput = add.createEl("input", { cls: "qj-input", type: "text" });
 	titleInput.placeholder = t("查询标题");
@@ -476,15 +462,52 @@ function renderQueryEditor(card: HTMLElement, ctx: SummaryCtx): void {
 	code.placeholder = t("查询语句");
 	const btn = add.createEl("button", { cls: "qj-btn", text: t("添加查询") });
 	btn.type = "button";
+
+	const startEdit = (index: number): void => {
+		editIndex = index;
+		const q = config.summaryQueries[index];
+		if (!q) return;
+		titleInput.value = q.title ?? "";
+		kindSel.value = q.kind;
+		code.value = q.code;
+		btn.setText(t("保存修改"));
+	};
+
 	btn.onclick = async () => {
 		if (code.value.trim() === "") return;
 		const title = titleInput.value.trim();
-		config.summaryQueries.push({
+		const entry = {
 			...(title !== "" ? { title } : {}),
 			kind: kindSel.value as QueryKind,
 			code: code.value.trim(),
-		});
+		};
+		if (editIndex >= 0 && editIndex < config.summaryQueries.length) {
+			config.summaryQueries[editIndex] = entry;
+		} else {
+			config.summaryQueries.push(entry);
+		}
 		await ctx.plugin.saveConfig();
 		rerender();
 	};
+
+	for (const [index, q] of [...config.summaryQueries].entries()) {
+		const row = card.createDiv({ cls: "qj-query-edit-row" });
+		if (q.title) row.createSpan({ cls: "qj-query-title", text: q.title });
+		row.createSpan({ cls: "qj-query-chip", text: q.kind });
+		row.createSpan({ cls: "qj-query-edit-code", text: q.code.split("\n")[0].slice(0, 60) });
+		const edit = row.createEl("button", { cls: "qj-feed-btn", text: "✎" });
+		edit.type = "button";
+		edit.setAttribute("aria-label", t("编辑"));
+		edit.onclick = () => startEdit(index);
+		const del = row.createEl("button", { cls: "qj-feed-btn" });
+		del.type = "button";
+		del.setAttribute("aria-label", t("删除"));
+		del.setText("✕");
+		del.onclick = async () => {
+			config.summaryQueries = config.summaryQueries.filter((x) => x !== q);
+			await ctx.plugin.saveConfig();
+			rerender();
+		};
+	}
+	card.appendChild(add);
 }

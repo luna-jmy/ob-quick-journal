@@ -138,4 +138,23 @@ describe("时间戳与段落", () => {
 		);
 		expect(withBlank[0].text).toBe("第一段。\n\n第二段。");
 	});
+
+	it("段落包含代码块与图片语法时原样保留（编辑写回不清代码块，回归）", () => {
+		const entries = collectEntries(
+			"2026-09-27",
+			[
+				"# 日志",
+				"## 今日随笔",
+				"一段说明。",
+				"```js",
+				"console.log(1);",
+				"```",
+				"![[photo.png]]",
+				"%%注释不进面板%%",
+			].join("\n").split("\n"),
+			SECTIONS,
+		);
+		expect(entries).toHaveLength(1);
+		expect(entries[0].text).toBe("一段说明。\n```js\nconsole.log(1);\n```\n![[photo.png]]");
+	});
 });

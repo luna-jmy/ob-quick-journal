@@ -61,4 +61,17 @@ describe("期间模型", () => {
 		const w53 = periodOf("week", new Date(2026, 11, 28));
 		expect(shiftPeriod(w53, 1).key).toBe("2027-W01");
 	});
+
+	it("季度期间：Q3 起止与天数、periodFromKey/shiftPeriod 跨年", () => {
+		const q3 = periodOf("quarter", new Date(2026, 8, 25)); // 2026-09-25 → Q3
+		expect(q3.key).toBe("2026-Q3");
+		expect(q3.days[0]).toEqual(new Date(2026, 6, 1)); // 7-1
+		expect(q3.days[q3.days.length - 1]).toEqual(new Date(2026, 8, 30)); // 9-30
+		expect(q3.days).toHaveLength(92);
+
+		expect(periodFromKey("2026-Q1")?.key).toBe("2026-Q1");
+		expect(periodFromKey("2026-Q9")).toBeNull();
+		expect(shiftPeriod(q3, 1).key).toBe("2026-Q4");
+		expect(shiftPeriod(q3, 2).key).toBe("2027-Q1"); // 跨年
+	});
 });

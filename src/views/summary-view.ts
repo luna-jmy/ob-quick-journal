@@ -34,6 +34,7 @@ export const VIEW_TYPE_QJ_SUMMARY = "qj-summary";
 const KIND_LABEL: Record<PeriodKind, string> = {
 	week: "周",
 	month: "月",
+	quarter: "季度",
 	year: "年",
 };
 
@@ -72,7 +73,9 @@ export class SummaryView extends ItemView {
 	}
 
 	setViewData(data: string): void {
-		if (data === "month" || data === "year" || data === "week") this.kind = data;
+		if (data === "month" || data === "year" || data === "week" || data === "quarter") {
+			this.kind = data;
+		}
 	}
 
 	async onOpen(): Promise<void> {
@@ -88,7 +91,7 @@ export class SummaryView extends ItemView {
 	}
 
 	private renderToolbar(toolbar: HTMLElement): void {
-		for (const kind of ["week", "month", "year"] as PeriodKind[]) {
+		for (const kind of ["week", "month", "quarter", "year"] as PeriodKind[]) {
 			const btn = toolbar.createEl("button", {
 				cls: `qj-btn qj-kind-btn${kind === this.kind ? " is-active" : ""}`,
 				text: t(KIND_LABEL[kind]),
@@ -175,7 +178,12 @@ export class SummaryView extends ItemView {
 				id: "task-heatmap",
 				title: t("任务完成热力图"),
 				render: (card, ctx) =>
-					renderHeatmap(card, ctx, doneByDay(ctx.days, ctx.records), ctx.kind === "year"),
+					renderHeatmap(
+						card,
+						ctx,
+						doneByDay(ctx.days, ctx.records),
+						ctx.kind === "year" || ctx.kind === "quarter",
+					),
 			},
 			{
 				id: "entry-heatmap",
@@ -185,7 +193,7 @@ export class SummaryView extends ItemView {
 					for (const e of ctx.entries) {
 						counts.set(e.date, (counts.get(e.date) ?? 0) + 1);
 					}
-					renderHeatmap(card, ctx, counts, ctx.kind === "year");
+					renderHeatmap(card, ctx, counts, ctx.kind === "year" || ctx.kind === "quarter");
 				},
 			},
 			{
@@ -207,7 +215,13 @@ export class SummaryView extends ItemView {
 
 	private async renderBody(body: HTMLElement): Promise<void> {
 		const config = this.plugin.config;
-		const index = new VaultIndex(this.app, config.journals.daily.dir);
+		// 非 daily 任务计数（开着时并入周/月/年日志的任务行）
+		const extraDirs = config.stats.includeNonDailyTasks
+			? (["weekly", "monthly", "annual"] as const)
+					.map((type) => config.journals[type].dir)
+					.filter((dir) => dir.trim() !== "")
+			: [];
+		const index = new VaultIndex(this.app, config.journals.daily.dir, extraDirs);
 		const days = this.period.days.map(dateKey);
 		const records = (await index.collectDayRecords(this.period.days)).records;
 
