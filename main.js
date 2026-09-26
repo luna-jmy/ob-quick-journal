@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-26T05:42:42.983Z */
+/* Quick Journal — bundled 2026-09-26T06:07:54.573Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -1900,14 +1900,7 @@ function renderCalendar(card, app, ctx) {
   const grid = card.createDiv({ cls: "qj-cal" });
   grid.createDiv({ cls: "qj-cal-head", text: "W" });
   for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
-  const done = /* @__PURE__ */ new Map();
-  for (const [day, rec] of ctx.records) {
-    let n = 0;
-    for (const line of rec.taskLines) {
-      if (/^\s*[-*]\s+\[[xX]\]/.test(line)) n++;
-    }
-    if (n > 0) done.set(day, n);
-  }
+  const done = doneByDay(ctx.days, ctx.records);
   const today = dateKey(/* @__PURE__ */ new Date());
   const index = new VaultIndex(app, config.journals.daily.dir);
   for (const week of monthGrid(year, month0)) {

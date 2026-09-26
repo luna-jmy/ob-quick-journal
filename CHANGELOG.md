@@ -5,6 +5,14 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.11.1
+
+### 修复
+
+- **月历完成数徽标口径**：改用与任务图/热力图相同的 `doneByDay`——`✅ YYYY-MM-DD`
+  完成日期优先归属，无完成日期才按笔记归属日（此前月历是内联数当天笔记的 `[x]` 行，
+  与其他组件口径不一致）
+
 ## 0.11.0
 
 ### 新增
