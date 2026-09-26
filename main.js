@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-26T15:22:51.094Z */
+/* Quick Journal — bundled 2026-09-26T15:36:44.446Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -151,7 +151,7 @@ var DEFAULT_CONFIG = {
   viewLocations: { summary: "tab", panel: "tab" },
   panel: { showCompleted: true },
   stats: { includeNonDailyTasks: true },
-  rollover: { openMarkers: [">"] }
+  tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } }
 };
 function isRecord(v) {
   return typeof v === "object" && v !== null;
@@ -252,12 +252,27 @@ function mergeConfig(saved) {
       base.panel.showCompleted = saved.panel.showCompleted;
     }
   }
-  if (isRecord(saved.rollover) && Array.isArray(saved.rollover.openMarkers)) {
-    const markers = saved.rollover.openMarkers;
-    const cleaned = markers.filter(
-      (m) => typeof m === "string" && m.length === 1 && m !== " "
+  const legacyRollover = isRecord(saved.rollover) ? saved.rollover.openMarkers : void 0;
+  if (isRecord(saved.tasks) || Array.isArray(legacyRollover)) {
+    const sanitizeMarkers = (value, stripSpace) => {
+      if (!Array.isArray(value)) return [];
+      return value.filter(
+        (m) => typeof m === "string" && m.length === 1 && (!stripSpace || m !== " ")
+      );
+    };
+    const savedTasksRaw = isRecord(saved.tasks) ? saved.tasks.markers : void 0;
+    const savedTasks = isRecord(savedTasksRaw) ? savedTasksRaw : void 0;
+    const open = sanitizeMarkers(
+      Array.isArray(legacyRollover) ? legacyRollover : savedTasks == null ? void 0 : savedTasks.open,
+      true
     );
-    base.rollover.openMarkers = cleaned;
+    if (open.length > 0) base.tasks.markers.open = open;
+    const done = sanitizeMarkers(savedTasks == null ? void 0 : savedTasks.done, false);
+    if (done.length > 0) base.tasks.markers.done = done;
+    const cancel = sanitizeMarkers(savedTasks == null ? void 0 : savedTasks.cancel, false);
+    if (cancel.length > 0) base.tasks.markers.cancel = cancel;
+    const nonTask = sanitizeMarkers(savedTasks == null ? void 0 : savedTasks.nonTask, false);
+    if (nonTask.length > 0) base.tasks.markers.nonTask = nonTask;
   }
   if (isRecord(saved.stats)) {
     if (typeof saved.stats.includeNonDailyTasks === "boolean") {
@@ -337,7 +352,13 @@ var EN = {
   "\u6536\u8D77\u5F55\u5165": "Hide capture bar",
   "\u663E\u793A\u5DF2\u5B8C\u6210\u4EFB\u52A1": "Show completed tasks",
   "\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6": "Unfinished task markers",
-  "\u6EDA\u52A8\u65F6\u8BA1\u5165\u672A\u5B8C\u6210\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF08\u7A7A\u683C\u59CB\u7EC8\u5305\u542B\uFF09\uFF0C\u9017\u53F7\u5206\u9694": "Checkbox characters treated as unfinished when rolling over (space is always included), comma-separated",
+  "\u8BA1\u5165\u672A\u5B8C\u6210\u7EDF\u8BA1\u4E0E\u6EDA\u52A8\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF08\u7A7A\u683C\u59CB\u7EC8\u5305\u542B\uFF09\uFF0C\u9017\u53F7\u5206\u9694": "Checkbox characters counted as unfinished / rolled over (space is always included), comma-separated",
+  "\u5DF2\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6": "Completed task markers",
+  "\u8BA1\u5165\u5B8C\u6210\u7EDF\u8BA1\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694": "Checkbox characters counted as completed, comma-separated",
+  "\u53D6\u6D88\u4EFB\u52A1\u6807\u8BC6": "Cancelled task markers",
+  "\u5B8C\u5168\u4E0D\u53C2\u4E0E\u4EFB\u4F55\u4EFB\u52A1\u7EDF\u8BA1\u7684\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694": "Characters excluded from all task statistics, comma-separated",
+  "\u975E\u4EFB\u52A1\u6807\u8BC6": "Non-task markers",
+  "\u9884\u7559\uFF1A\u5F53\u524D\u540C\u53D6\u6D88\uFF08\u4E0D\u8BA1\u6570\uFF09\uFF0C\u5BF9\u5E94\u529F\u80FD\u540E\u7EED\u63D0\u4F9B\uFF0C\u9017\u53F7\u5206\u9694": "Reserved: currently same as cancelled (not counted); features to come, comma-separated",
   "\u6EDA\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Roll over unfinished tasks",
   "\u79FB\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Move unfinished tasks",
   "\u6765\u81EA": "From",
@@ -948,29 +969,34 @@ function skeletonFor(type, now, sections, filenameFormat) {
 }
 
 // src/parse/task-lines.ts
-var TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+var TASK_RE = /^\s*[-*]\s+\[([^\]])\]\s*(.*)$/;
+var DEFAULT_DONE_MARKERS = ["x", "X"];
 function extractDate(mark, body) {
   const re = new RegExp(`${mark}\\s*(\\d{4}-\\d{2}-\\d{2})`);
   const m = re.exec(body);
   return m ? m[1] : void 0;
 }
-function parseTaskLine(line) {
+function statusCharOf(line) {
+  const m = TASK_RE.exec(line);
+  return m ? m[1] : null;
+}
+function parseTaskLine(line, doneMarkers = DEFAULT_DONE_MARKERS) {
   const m = TASK_RE.exec(line);
   if (!m) return null;
   const status = m[1];
   const body = m[2];
   return {
     line,
-    done: status === "x" || status === "X",
+    done: doneMarkers.includes(status),
     doneDate: extractDate("\u2705", body),
     createdDate: extractDate("\u2795", body)
   };
 }
-function parseTaskLines(lines) {
-  return lines.map((l) => parseTaskLine(l)).filter((t2) => t2 !== null);
+function parseTaskLines(lines, doneMarkers = DEFAULT_DONE_MARKERS) {
+  return lines.map((l) => parseTaskLine(l, doneMarkers)).filter((t2) => t2 !== null);
 }
-var ANY_TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]/;
-function collectTaskLines(lines) {
+function collectTaskLines(lines, spec) {
+  const allowed = spec ? /* @__PURE__ */ new Set([" ", ...spec.open, ...spec.done]) : null;
   const out = [];
   let inFence = false;
   for (const line of lines) {
@@ -979,7 +1005,10 @@ function collectTaskLines(lines) {
       continue;
     }
     if (inFence) continue;
-    if (ANY_TASK_RE.test(line)) out.push(line);
+    const status = statusCharOf(line);
+    if (status === null) continue;
+    if (allowed !== null && !allowed.has(status)) continue;
+    out.push(line);
   }
   return out;
 }
@@ -1107,10 +1136,11 @@ function collectEntries(date, lines, sections) {
 
 // src/services/vault-index.ts
 var VaultIndex = class {
-  constructor(app, dailyDir, extraTaskDirs = []) {
+  constructor(app, dailyDir, extraTaskDirs = [], taskSpec) {
     this.app = app;
     this.dailyDir = dailyDir;
     this.extraTaskDirs = extraTaskDirs;
+    this.taskSpec = taskSpec;
   }
   filesUnder(dir) {
     const prefix = dir.replace(/\/+$/, "") + "/";
@@ -1135,7 +1165,7 @@ var VaultIndex = class {
       for (const fl of parseFieldLines(text.split(/\r?\n/))) {
         if (!(fl.key in fields)) fields[fl.key] = fl.value;
       }
-      const taskLines = collectTaskLines(text.split(/\r?\n/));
+      const taskLines = collectTaskLines(text.split(/\r?\n/), this.taskSpec);
       records.set(key, { date: key, fieldValues: fields, taskLines });
     }
     await this.appendNonDailyTasks(records, daySet);
@@ -1152,7 +1182,7 @@ var VaultIndex = class {
         const period = parseNoteDateKind(file.name);
         if (period === null || period.kind === "day") continue;
         const text = await this.app.vault.cachedRead(file);
-        for (const line of collectTaskLines(text.split(/\r?\n/))) {
+        for (const line of collectTaskLines(text.split(/\r?\n/), this.taskSpec)) {
           const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
           const fallback = periodFromKey(period.key);
           const target = done !== null && daySet.has(done[1]) ? done[1] : fallback !== null && daySet.has(dateKey(fallback.start)) ? dateKey(fallback.start) : null;
@@ -1641,14 +1671,14 @@ function boolStats(fields, days, records) {
     return { key: f.key, label: f.label, yes, no, missingDays };
   });
 }
-function taskStats(days, records) {
+function taskStats(days, records, doneMarkers = DEFAULT_DONE_MARKERS) {
   const daySet = new Set(days);
   let total = 0;
   let done = 0;
   let doneInPeriod = 0;
   let createdInPeriod = 0;
   for (const rec of records.values()) {
-    for (const task of parseTaskLines(rec.taskLines)) {
+    for (const task of parseTaskLines(rec.taskLines, doneMarkers)) {
       total++;
       if (task.done) {
         done++;
@@ -1659,12 +1689,12 @@ function taskStats(days, records) {
   }
   return { total, done, doneInPeriod, createdInPeriod };
 }
-function doneByDay(days, records) {
+function doneByDay(days, records, doneMarkers = DEFAULT_DONE_MARKERS) {
   var _a, _b;
   const out = /* @__PURE__ */ new Map();
   for (const day of days) out.set(day, 0);
   for (const rec of records.values()) {
-    for (const task of parseTaskLines(rec.taskLines)) {
+    for (const task of parseTaskLines(rec.taskLines, doneMarkers)) {
       if (!task.done) continue;
       const key = (_a = task.doneDate) != null ? _a : rec.date;
       if (out.has(key)) out.set(key, ((_b = out.get(key)) != null ? _b : 0) + 1);
@@ -1972,7 +2002,7 @@ function renderCalendar(card, app, ctx) {
   const grid = card.createDiv({ cls: "qj-cal" });
   grid.createDiv({ cls: "qj-cal-head", text: "W" });
   for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
-  const done = doneByDay(ctx.days, ctx.records);
+  const done = doneByDay(ctx.days, ctx.records, ctx.doneMarkers);
   const today = dateKey(/* @__PURE__ */ new Date());
   const index = new VaultIndex(app, config.journals.daily.dir);
   for (const week of monthGrid(year, month0)) {
@@ -2243,8 +2273,8 @@ var SummaryView = class extends import_obsidian6.ItemView {
         id: "task-chart",
         title: t("\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1"),
         render: (card, ctx) => {
-          const tasks = taskStats(ctx.days, ctx.records);
-          const done = doneByDay(ctx.days, ctx.records);
+          const tasks = taskStats(ctx.days, ctx.records, ctx.doneMarkers);
+          const done = doneByDay(ctx.days, ctx.records, ctx.doneMarkers);
           renderTaskChart(card, ctx, [
             { label: t("\u5B8C\u6210"), value: String(tasks.doneInPeriod) },
             { label: t("\u65B0\u5EFA"), value: String(tasks.createdInPeriod) },
@@ -2274,7 +2304,7 @@ var SummaryView = class extends import_obsidian6.ItemView {
         render: (card, ctx) => renderHeatmap(
           card,
           ctx,
-          doneByDay(ctx.days, ctx.records),
+          doneByDay(ctx.days, ctx.records, ctx.doneMarkers),
           ctx.kind === "year" || ctx.kind === "quarter"
         )
       },
@@ -2308,7 +2338,12 @@ var SummaryView = class extends import_obsidian6.ItemView {
   async renderBody(body) {
     const config = this.plugin.config;
     const extraDirs = config.stats.includeNonDailyTasks ? ["weekly", "monthly", "annual"].map((type) => config.journals[type].dir).filter((dir) => dir.trim() !== "") : [];
-    const index = new VaultIndex(this.app, config.journals.daily.dir, extraDirs);
+    const index = new VaultIndex(
+      this.app,
+      config.journals.daily.dir,
+      extraDirs,
+      config.tasks.markers
+    );
     const days = this.period.days.map(dateKey);
     const records = (await index.collectDayRecords(this.period.days)).records;
     body.createDiv({ cls: "qj-period-header" }).createSpan({
@@ -2323,6 +2358,7 @@ var SummaryView = class extends import_obsidian6.ItemView {
       days,
       records,
       entries,
+      doneMarkers: config.tasks.markers.done,
       component: this,
       editing: this.editing,
       rerender: () => void this.render()
@@ -2480,7 +2516,7 @@ var RolloverService = class {
   }
   /** 完整标记集 = 空格（隐含标配）+ 配置的额外标识。 */
   markers() {
-    return [" ", ...this.getConfig().rollover.openMarkers];
+    return [" ", ...this.getConfig().tasks.markers.open];
   }
   dir(type) {
     return this.getConfig().journals[type].dir.replace(/\/+$/, "");
@@ -3185,6 +3221,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         this.plugin.refreshSummaryViews();
       })
     );
+    this.renderTaskMarkers();
     new import_obsidian10.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
       drop.addOption("zh", t("\u4E2D\u6587"));
@@ -3441,15 +3478,58 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         await this.plugin.saveConfig();
       })
     );
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6")).setDesc(t("\u6EDA\u52A8\u65F6\u8BA1\u5165\u672A\u5B8C\u6210\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF08\u7A7A\u683C\u59CB\u7EC8\u5305\u542B\uFF09\uFF0C\u9017\u53F7\u5206\u9694")).addText((text) => {
-      text.setPlaceholder(">,/");
-      text.setValue(this.plugin.config.rollover.openMarkers.join(","));
-      text.onChange(async (value) => {
-        const markers = value.split(",").map((token) => token.trim()).filter((token) => token.length === 1 && token !== " ");
-        this.plugin.config.rollover.openMarkers = markers;
-        await this.plugin.saveConfig();
+  }
+  /** 通用 → 统计 的任务标识组（未完成/已完成/取消/非任务）。 */
+  renderTaskMarkers() {
+    const markers = this.plugin.config.tasks.markers;
+    const markerInput = (name, desc, value, stripSpace, write) => {
+      new import_obsidian10.Setting(this.containerEl).setName(name).setDesc(desc).addText((text) => {
+        text.setPlaceholder(value.join(","));
+        text.setValue(value.join(","));
+        text.onChange(async (next) => {
+          const parsed = next.split(",").map((token) => token.trim()).filter((token) => token.length === 1 && (!stripSpace || token !== " "));
+          await write(parsed);
+          await this.plugin.saveConfig();
+          this.plugin.refreshSummaryViews();
+        });
       });
-    });
+    };
+    markerInput(
+      t("\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6"),
+      t("\u8BA1\u5165\u672A\u5B8C\u6210\u7EDF\u8BA1\u4E0E\u6EDA\u52A8\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF08\u7A7A\u683C\u59CB\u7EC8\u5305\u542B\uFF09\uFF0C\u9017\u53F7\u5206\u9694"),
+      markers.open,
+      true,
+      async (next) => {
+        if (next.length > 0) markers.open = next;
+      }
+    );
+    markerInput(
+      t("\u5DF2\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6"),
+      t("\u8BA1\u5165\u5B8C\u6210\u7EDF\u8BA1\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694"),
+      markers.done,
+      false,
+      async (next) => {
+        if (next.length > 0) markers.done = next;
+      }
+    );
+    markerInput(
+      t("\u53D6\u6D88\u4EFB\u52A1\u6807\u8BC6"),
+      t("\u5B8C\u5168\u4E0D\u53C2\u4E0E\u4EFB\u4F55\u4EFB\u52A1\u7EDF\u8BA1\u7684\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694"),
+      markers.cancel,
+      false,
+      async (next) => {
+        markers.cancel = next;
+      }
+    );
+    markerInput(
+      t("\u975E\u4EFB\u52A1\u6807\u8BC6"),
+      t("\u9884\u7559\uFF1A\u5F53\u524D\u540C\u53D6\u6D88\uFF08\u4E0D\u8BA1\u6570\uFF09\uFF0C\u5BF9\u5E94\u529F\u80FD\u540E\u7EED\u63D0\u4F9B\uFF0C\u9017\u53F7\u5206\u9694"),
+      markers.nonTask,
+      false,
+      async (next) => {
+        markers.nonTask = next;
+      }
+    );
   }
 };
 
