@@ -5,6 +5,7 @@
 
 import { TFile, type App } from "obsidian";
 import { parseFieldLines } from "../parse/field-lines";
+import { collectTaskLines } from "../parse/task-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { parseNoteDateKind, periodFromKey } from "../periods/period";
 import { dateKey } from "../periods/period";
@@ -51,9 +52,7 @@ export class VaultIndex {
 			for (const fl of parseFieldLines(text.split(/\r?\n/))) {
 				if (!(fl.key in fields)) fields[fl.key] = fl.value;
 			}
-			const taskLines = text
-				.split(/\r?\n/)
-				.filter((l) => /^\s*[-*]\s+\[([ xX/-])\]/.test(l));
+			const taskLines = collectTaskLines(text.split(/\r?\n/));
 			records.set(key, { date: key, fieldValues: fields, taskLines });
 		}
 		await this.appendNonDailyTasks(records, daySet);
@@ -74,8 +73,7 @@ export class VaultIndex {
 				const period = parseNoteDateKind(file.name);
 				if (period === null || period.kind === "day") continue;
 				const text = await this.app.vault.cachedRead(file);
-				for (const line of text.split(/\r?\n/)) {
-					if (!/^\s*[-*]\s+\[([ xX/-])\]/.test(line)) continue;
+				for (const line of collectTaskLines(text.split(/\r?\n/))) {
 					const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
 					const fallback = periodFromKey(period.key);
 					const target =
@@ -138,13 +136,23 @@ export class VaultIndex {
 	}
 
 	private resolveDate(file: TFile): string | null {
-		// 1. frontmatter journal-date
 		const cache = this.app.metadataCache.getFileCache(file);
 		const fmDate: unknown = cache?.frontmatter?.["journal-date"];
-		if (typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate)) return fmDate;
-		// 2. 文件名
+		// 1. 标准文件名 YYYY-MM-DD.md：直接认（frontmatter journal-date 优先覆盖）
 		const name = parseNoteDateKind(file.name);
-		if (name?.kind === "day") return name.key;
+		if (name?.kind === "day") {
+			return typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate)
+				? fmDate
+				: name.key;
+		}
+		// 2. 非标准文件名：必须同时满足「daily 身份标记 + journal-date」才计入——
+		// 防止误放进日志目录的周记草稿等（只带 journal-date）混进统计
+		const journal: unknown = cache?.frontmatter?.["journal"];
+		const type: unknown = cache?.frontmatter?.["type"];
+		const isDailyNote = journal === "Daily" || type === "daily_log";
+		if (isDailyNote && typeof fmDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fmDate)) {
+			return fmDate;
+		}
 		// 3. 兜底：无法定位到某一天的笔记不计入期间（口径：宁缺勿错）
 		return null;
 	}

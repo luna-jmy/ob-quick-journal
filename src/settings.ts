@@ -83,6 +83,7 @@ export class QJSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
 					this.plugin.config.stats.includeNonDailyTasks = value;
 					await this.plugin.saveConfig();
+					this.plugin.refreshSummaryViews();
 				}),
 			);
 

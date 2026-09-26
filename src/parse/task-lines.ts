@@ -39,3 +39,20 @@ export function parseTaskLines(lines: string[]): ParsedTaskLine[] {
 		.map((l) => parseTaskLine(l))
 		.filter((t): t is ParsedTaskLine => t !== null);
 }
+
+const ANY_TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]/;
+
+/** 采集任务行原文（统计用）：跳过 ``` 围栏内的内容——代码块里长得像任务的行不算数。 */
+export function collectTaskLines(lines: string[]): string[] {
+	const out: string[] = [];
+	let inFence = false;
+	for (const line of lines) {
+		if (line.trimStart().startsWith("```")) {
+			inFence = !inFence;
+			continue;
+		}
+		if (inFence) continue;
+		if (ANY_TASK_RE.test(line)) out.push(line);
+	}
+	return out;
+}

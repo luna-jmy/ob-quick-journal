@@ -173,6 +173,13 @@ export default class QuickJournalPlugin extends Plugin {
 		await workspace.revealLeaf(leaf);
 	}
 
+	/** 设置变更后重算汇总视图（统计口径等改了，已打开的视图不会自己重渲染）。 */
+	refreshSummaryViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QJ_SUMMARY)) {
+			if (leaf.view instanceof SummaryView) void leaf.view.render();
+		}
+	}
+
 	/** 打开某期间的日志/复盘笔记（递归子目录查找；不存在则按该类型建骨架到目录根）。月历入口用。 */
 	async openPeriodNote(type: PeriodType, key: string): Promise<void> {
 		const journal = this.config.journals[type];

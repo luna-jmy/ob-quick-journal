@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectEntries } from "../src/parse/section-entries";
+import { collectTaskLines } from "../src/parse/task-lines";
 import type { JournalSection } from "../src/types";
 
 const NOTE = [
@@ -156,5 +157,19 @@ describe("时间戳与段落", () => {
 		);
 		expect(entries).toHaveLength(1);
 		expect(entries[0].text).toBe("一段说明。\n```js\nconsole.log(1);\n```\n![[photo.png]]");
+	});
+});
+
+describe("任务行采集（统计口径）", () => {
+	it("跳过代码围栏内的任务样式行；围栏外的照常采集", () => {
+		const lines = [
+			"# 日志",
+			"- [x] 真任务",
+			"```markdown",
+			"- [x] 示例里的假任务",
+			"```",
+			"- [ ] 未完成",
+		];
+		expect(collectTaskLines(lines)).toEqual(["- [x] 真任务", "- [ ] 未完成"]);
 	});
 });
