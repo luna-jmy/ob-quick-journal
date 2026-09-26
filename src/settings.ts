@@ -57,6 +57,35 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			});
 
+		new Setting(this.containerEl).setName(t("速记面板")).setHeading();
+		new Setting(this.containerEl)
+			.setName(t("显示已完成任务"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
+					this.plugin.config.panel.showCompleted = value;
+					await this.plugin.saveConfig();
+				}),
+			);
+		new Setting(this.containerEl)
+			.setName(t("未完成任务标识"))
+			.setDesc(t("滚动时计入未完成的勾选框字符，逗号分隔；␣ 表示空格"))
+			.addText((text) => {
+				text.setPlaceholder("␣,>");
+				text.setValue(
+					this.plugin.config.rollover.openMarkers.map((m) => (m === " " ? "␣" : m)).join(","),
+				);
+				text.onChange(async (value) => {
+					const markers = value
+						.split(",")
+						.map((token) => (token === "␣" ? " " : token))
+						.filter((token) => token.length === 1);
+					if (markers.length > 0) {
+						this.plugin.config.rollover.openMarkers = markers;
+						await this.plugin.saveConfig();
+					}
+				});
+			});
+
 		new Setting(this.containerEl).setName(t("打开位置")).setHeading();
 		new Setting(this.containerEl)
 			.setName(t("日志汇总"))

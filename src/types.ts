@@ -62,6 +62,10 @@ export interface QJConfig {
 	/** 趋势组件选中的字段（sectionId::key） */
 	trendSelection?: string;
 	viewLocations: { summary: ViewLocation; panel: ViewLocation };
+	/** 速记面板偏好 */
+	panel: { showCompleted: boolean };
+	/** 未完成任务滚动：哪些勾选框字符算「未完成」（可多选，默认空格 + > 与脚本一致） */
+	rollover: { openMarkers: string[] };
 }
 
 export const BOOL_YES = "✔️";
@@ -178,6 +182,8 @@ export const DEFAULT_CONFIG: QJConfig = {
 	summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
 	summaryQueries: [],
 	viewLocations: { summary: "tab", panel: "tab" },
+	panel: { showCompleted: true },
+	rollover: { openMarkers: [" ", ">"] },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -281,6 +287,16 @@ export function mergeConfig(saved: unknown): QJConfig {
 		if (vl.panel === "tab" || vl.panel === "sidebar") {
 			base.viewLocations.panel = vl.panel;
 		}
+	}
+	if (isRecord(saved.panel)) {
+		if (typeof saved.panel.showCompleted === "boolean") {
+			base.panel.showCompleted = saved.panel.showCompleted;
+		}
+	}
+	if (isRecord(saved.rollover) && Array.isArray(saved.rollover.openMarkers)) {
+		const markers = saved.rollover.openMarkers as unknown[];
+		const cleaned = markers.filter((m): m is string => typeof m === "string" && m.length === 1);
+		if (cleaned.length > 0) base.rollover.openMarkers = cleaned;
 	}
 	return base;
 }

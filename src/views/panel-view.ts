@@ -17,6 +17,7 @@ import {
 import type QuickJournalPlugin from "../main";
 import type { JournalSection } from "../types";
 import { VaultIndex } from "../services/vault-index";
+import { RolloverService } from "../services/rollover-service";
 import type { SectionEntry } from "../parse/section-entries";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { EntryEditModal } from "../ui/entry-edit-modal";
@@ -35,10 +36,13 @@ export class PanelView extends ItemView {
 	private targetId = "";
 	/** 筛选（同时控制输入目标与展示范围）；空串 = 全部 */
 	private filterId = "";
-	private showDone = true;
 	private searchText = "";
 	/** 顶部功能区收起（手机端把内容区顶上来） */
 	private collapsed = false;
+
+	private get showDone(): boolean {
+		return this.plugin.config.panel.showCompleted;
+	}
 
 	constructor(leaf: WorkspaceLeaf, private plugin: QuickJournalPlugin) {
 		super(leaf);
@@ -151,12 +155,19 @@ export class PanelView extends ItemView {
 			cls: `qj-btn qj-icon-btn${this.showDone ? " is-active" : ""}`,
 		});
 		doneBtn.type = "button";
-		doneBtn.setAttribute("aria-label", t("显示已完成"));
+		doneBtn.setAttribute("aria-label", t("显示已完成任务"));
 		setIcon(doneBtn, this.showDone ? "eye" : "eye-off");
 		doneBtn.onclick = () => {
-			this.showDone = !this.showDone;
-			this.render();
+			this.plugin.config.panel.showCompleted = !this.showDone;
+			void this.plugin.saveConfig().then(() => this.render());
 		};
+
+		// 未完成任务滚动：从最近一期日志搬到今天（确认后原子迁移）
+		const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
+		rollBtn.type = "button";
+		rollBtn.setAttribute("aria-label", t("滚动未完成任务"));
+		setIcon(rollBtn, "arrow-down-up");
+		rollBtn.onclick = () => void this.rollover();
 
 		const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
 		search.type = "search";
@@ -191,23 +202,32 @@ export class PanelView extends ItemView {
 			this.targetId = targets[0].id;
 		}
 
-		const wrap = root.createDiv({ cls: "qj-panel-input" });
+		// 卡片式录入区：目标行 / 自增高输入框 / 底部提示 + 发送
+		const box = root.createDiv({ cls: "qj-composer" });
+		const top = box.createDiv({ cls: "qj-composer-top" });
 		if (targets.length > 1) {
-			const dropdown = new DropdownComponent(wrap);
+			const dropdown = new DropdownComponent(top);
 			dropdown.addOptions(
 				Object.fromEntries(targets.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")])),
 			);
 			dropdown.setValue(this.targetId);
 			dropdown.onChange((value) => (this.targetId = value));
+		} else {
+			top.createSpan({
+				cls: "qj-composer-target",
+				text: targets[0].heading.replace(/^#+\s*/, ""),
+			});
 		}
-		this.targetId = targets.some((s) => s.id === this.targetId)
-			? this.targetId
-			: targets[0].id;
 
-		const input = wrap.createEl("textarea", { cls: "qj-input qj-textarea" });
-		input.rows = 2;
+		const input = box.createEl("textarea", { cls: "qj-composer-input" });
+		input.rows = 1;
 		input.placeholder = t("记点什么…");
 		this.inputEl = input;
+		const grow = () => {
+			input.setCssProps({ height: "auto" });
+			input.setCssProps({ height: `${Math.min(input.scrollHeight, 160)}px` });
+		};
+		input.addEventListener("input", grow);
 		input.addEventListener("keydown", (evt) => {
 			if (evt.key === "Enter" && !evt.shiftKey) {
 				evt.preventDefault();
@@ -215,11 +235,38 @@ export class PanelView extends ItemView {
 			}
 		});
 
-		const send = wrap.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
+		const foot = box.createDiv({ cls: "qj-composer-foot" });
+		foot.createSpan({ cls: "qj-composer-hint", text: t("Enter 发送 · Shift+Enter 换行") });
+		const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
 		send.type = "button";
-		setIcon(send, "send");
-		send.setAttribute("aria-label", t("发送"));
+		setIcon(send.createSpan({ cls: "qj-btn-icon" }), "send");
+		send.createSpan({ text: t("发送") });
 		send.onclick = () => void this.send();
+	}
+
+	/** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
+	private async rollover(): Promise<void> {
+		const service = new RolloverService(this.app, () => this.plugin.config);
+		const preview = await service.preview(new Date());
+		if (preview === null) {
+			new Notice(t("没有可移动的任务"));
+			return;
+		}
+		new ConfirmModal(
+			this.app,
+			t("移动未完成任务"),
+			`${t("来自")} ${preview.sourceDate} · ${preview.blocks.length} ${t("个任务块")}`,
+			async () => {
+				const result = await service.perform(preview, new Date());
+				if (result.ok) {
+					new Notice(`${t("已移动")} ${result.moved} ${t("个任务块")} → ${result.from}`);
+					await this.loadFeed();
+				} else {
+					new Notice(`${t("写入失败")}: ${result.message}`);
+				}
+			},
+			t("移动"),
+		).open();
 	}
 
 	private async send(): Promise<void> {

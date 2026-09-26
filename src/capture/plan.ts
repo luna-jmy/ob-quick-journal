@@ -206,6 +206,30 @@ export function planDeleteLineAt(lineIndex: number): WritePlan {
 	};
 }
 
+/** 多行插入（任务滚动等用）：定位同 planAppend（区段末追加 / 建标题），同锚点连排。 */
+export function planInsertLines(
+	lines: string[],
+	opts: { heading: string; headingMissingCreates: boolean; newLines: string[] },
+): WritePlan {
+	if (opts.newLines.length === 0) {
+		return { status: "ok", edits: [], creates: [] };
+	}
+	const single = planAppend(lines, {
+		heading: opts.heading,
+		headingMissingCreates: opts.headingMissingCreates,
+		line: opts.newLines[0],
+	});
+	if (single.status !== "ok") return single;
+	if (single.creates.length === 0) return single;
+	const anchor = single.creates[0].afterLineIndex;
+	return {
+		status: "ok",
+		createHeading: single.createHeading,
+		edits: [],
+		creates: opts.newLines.map((line) => ({ afterLineIndex: anchor, line })),
+	};
+}
+
 /** 把计划作用到文本（原子：调用方在 Vault.process 回调里用）。 */
 export function applyPlan(text: string, plan: Extract<WritePlan, { status: "ok" }>): string {
 	const lines = text.split(/\r?\n/);
