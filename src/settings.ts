@@ -86,6 +86,7 @@ export class QJSettingTab extends PluginSettingTab {
 					this.plugin.refreshSummaryViews();
 				}),
 			);
+		this.renderTaskMarkers();
 
 		new Setting(this.containerEl)
 			.setName(t("界面语言"))
@@ -399,21 +400,70 @@ export class QJSettingTab extends PluginSettingTab {
 					await this.plugin.saveConfig();
 				}),
 			);
+	}
 
-		new Setting(this.containerEl)
-			.setName(t("未完成任务标识"))
-			.setDesc(t("滚动时计入未完成的勾选框字符（空格始终包含），逗号分隔"))
-			.addText((text) => {
-				text.setPlaceholder(">,/");
-				text.setValue(this.plugin.config.rollover.openMarkers.join(","));
-				text.onChange(async (value) => {
-					const markers = value
-						.split(",")
-						.map((token) => token.trim())
-						.filter((token) => token.length === 1 && token !== " ");
-					this.plugin.config.rollover.openMarkers = markers;
-					await this.plugin.saveConfig();
+	/** 通用 → 统计 的任务标识组（未完成/已完成/取消/非任务）。 */
+	private renderTaskMarkers(): void {
+		const markers = this.plugin.config.tasks.markers;
+		const markerInput = (
+			name: string,
+			desc: string,
+			value: string[],
+			stripSpace: boolean,
+			write: (next: string[]) => Promise<void>,
+		): void => {
+			new Setting(this.containerEl)
+				.setName(name)
+				.setDesc(desc)
+				.addText((text) => {
+					text.setPlaceholder(value.join(","));
+					text.setValue(value.join(","));
+					text.onChange(async (next) => {
+						const parsed = next
+							.split(",")
+							.map((token) => token.trim())
+							.filter((token) => token.length === 1 && (!stripSpace || token !== " "));
+						await write(parsed);
+						await this.plugin.saveConfig();
+						this.plugin.refreshSummaryViews();
+					});
 				});
-			});
+		};
+		markerInput(
+			t("未完成任务标识"),
+			t("计入未完成统计与滚动的勾选框字符（空格始终包含），逗号分隔"),
+			markers.open,
+			true,
+			async (next) => {
+				if (next.length > 0) markers.open = next;
+			},
+		);
+		markerInput(
+			t("已完成任务标识"),
+			t("计入完成统计的勾选框字符，逗号分隔"),
+			markers.done,
+			false,
+			async (next) => {
+				if (next.length > 0) markers.done = next;
+			},
+		);
+		markerInput(
+			t("取消任务标识"),
+			t("完全不参与任何任务统计的字符，逗号分隔"),
+			markers.cancel,
+			false,
+			async (next) => {
+				markers.cancel = next;
+			},
+		);
+		markerInput(
+			t("非任务标识"),
+			t("预留：当前同取消（不计数），对应功能后续提供，逗号分隔"),
+			markers.nonTask,
+			false,
+			async (next) => {
+				markers.nonTask = next;
+			},
+		);
 	}
 }

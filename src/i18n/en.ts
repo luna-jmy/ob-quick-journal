@@ -71,8 +71,15 @@ export const EN: Record<string, string> = {
 	"收起录入": "Hide capture bar",
 	"显示已完成任务": "Show completed tasks",
 	"未完成任务标识": "Unfinished task markers",
-	"滚动时计入未完成的勾选框字符（空格始终包含），逗号分隔":
-		"Checkbox characters treated as unfinished when rolling over (space is always included), comma-separated",
+	"计入未完成统计与滚动的勾选框字符（空格始终包含），逗号分隔":
+		"Checkbox characters counted as unfinished / rolled over (space is always included), comma-separated",
+	"已完成任务标识": "Completed task markers",
+	"计入完成统计的勾选框字符，逗号分隔": "Checkbox characters counted as completed, comma-separated",
+	"取消任务标识": "Cancelled task markers",
+	"完全不参与任何任务统计的字符，逗号分隔": "Characters excluded from all task statistics, comma-separated",
+	"非任务标识": "Non-task markers",
+	"预留：当前同取消（不计数），对应功能后续提供，逗号分隔":
+		"Reserved: currently same as cancelled (not counted); features to come, comma-separated",
 	"滚动未完成任务": "Roll over unfinished tasks",
 	"移动未完成任务": "Move unfinished tasks",
 	"来自": "From",

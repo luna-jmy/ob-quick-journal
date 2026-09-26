@@ -5,7 +5,7 @@
 
 import type { SectionField } from "../types";
 import { BOOL_YES, BOOL_NO } from "../types";
-import { parseTaskLines } from "../parse/task-lines";
+import { DEFAULT_DONE_MARKERS, parseTaskLines } from "../parse/task-lines";
 import type { DayRecord } from "./day-record";
 
 export interface BoolStat {
@@ -100,14 +100,18 @@ export function numberStats(
 	});
 }
 
-export function taskStats(days: string[], records: Map<string, DayRecord>): TaskStat {
+export function taskStats(
+	days: string[],
+	records: Map<string, DayRecord>,
+	doneMarkers: string[] = DEFAULT_DONE_MARKERS,
+): TaskStat {
 	const daySet = new Set(days);
 	let total = 0;
 	let done = 0;
 	let doneInPeriod = 0;
 	let createdInPeriod = 0;
 	for (const rec of records.values()) {
-		for (const task of parseTaskLines(rec.taskLines)) {
+		for (const task of parseTaskLines(rec.taskLines, doneMarkers)) {
 			total++;
 			if (task.done) {
 				done++;
@@ -123,11 +127,15 @@ export function taskStats(days: string[], records: Map<string, DayRecord>): Task
  * 按日完成任务数（热力图 / 柱状图用）：✅ 日期优先，无 ✅ 的已完成按笔记日记入。
  * 键为 YYYY-MM-DD，覆盖 days 里出现的每一天（无数据的也为 0）。
  */
-export function doneByDay(days: string[], records: Map<string, DayRecord>): Map<string, number> {
+export function doneByDay(
+	days: string[],
+	records: Map<string, DayRecord>,
+	doneMarkers: string[] = DEFAULT_DONE_MARKERS,
+): Map<string, number> {
 	const out = new Map<string, number>();
 	for (const day of days) out.set(day, 0);
 	for (const rec of records.values()) {
-		for (const task of parseTaskLines(rec.taskLines)) {
+		for (const task of parseTaskLines(rec.taskLines, doneMarkers)) {
 			if (!task.done) continue;
 			const key = task.doneDate ?? rec.date;
 			if (out.has(key)) out.set(key, (out.get(key) ?? 0) + 1);

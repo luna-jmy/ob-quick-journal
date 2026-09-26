@@ -25,6 +25,8 @@ export interface SummaryCtx {
 	days: string[];
 	records: Map<string, DayRecord>;
 	entries: SectionEntry[];
+	/** 已完成任务标识（统计口径） */
+	doneMarkers: string[];
 	/** 视图自身（MarkdownRenderer / executeJs 的组件归属） */
 	component: Component;
 	/** 编辑模式（查询块显示录入 UI 而不是渲染结果） */
@@ -319,7 +321,7 @@ export function renderCalendar(card: HTMLElement, app: App, ctx: SummaryCtx): vo
 	for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
 
 	// 完成口径与其余组件一致：✅ 完成日期优先，无日期按笔记归属日（doneByDay）
-	const done = doneByDay(ctx.days, ctx.records);
+	const done = doneByDay(ctx.days, ctx.records, ctx.doneMarkers);
 	const today = dateKey(new Date());
 	const index = new VaultIndex(app, config.journals.daily.dir);
 	for (const week of monthGrid(year, month0)) {

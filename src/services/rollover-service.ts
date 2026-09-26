@@ -32,7 +32,7 @@ export class RolloverService {
 
 	/** 完整标记集 = 空格（隐含标配）+ 配置的额外标识。 */
 	private markers(): string[] {
-		return [" ", ...this.getConfig().rollover.openMarkers];
+		return [" ", ...this.getConfig().tasks.markers.open];
 	}
 
 	private dir(type: PeriodType): string {

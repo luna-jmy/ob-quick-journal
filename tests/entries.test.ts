@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectEntries } from "../src/parse/section-entries";
-import { collectTaskLines } from "../src/parse/task-lines";
+import { collectTaskLines, parseTaskLines } from "../src/parse/task-lines";
 import type { JournalSection } from "../src/types";
 
 const NOTE = [
@@ -171,5 +171,31 @@ describe("任务行采集（统计口径）", () => {
 			"- [ ] 未完成",
 		];
 		expect(collectTaskLines(lines)).toEqual(["- [x] 真任务", "- [ ] 未完成"]);
+	});
+});
+
+describe("任务标识体系（spec 采集）", () => {
+	const SPEC = { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] };
+	const LINES = [
+		"- [ ] 空格未完成",
+		"- [>] 顺延",
+		"- [x] 已完成",
+		"- [-] 取消",
+		"- [/] 也算取消",
+		"- [D] 未识别字符",
+	];
+
+	it("cancel 与未识别字符不采集（不进任何统计）；open/done 保留", () => {
+		expect(collectTaskLines(LINES, SPEC)).toEqual([
+			"- [ ] 空格未完成",
+			"- [>] 顺延",
+			"- [x] 已完成",
+		]);
+	});
+
+	it("自定义已完成字符驱动 parseTaskLine", () => {
+		const parsed = parseTaskLines(["- [D] 自定义完成"], ["D"]);
+		expect(parsed[0]?.done).toBe(true);
+		expect(parseTaskLines(["- [x] 默认口径"])[0]?.done).toBe(true);
 	});
 });

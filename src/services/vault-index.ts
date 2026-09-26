@@ -5,7 +5,7 @@
 
 import { TFile, type App } from "obsidian";
 import { parseFieldLines } from "../parse/field-lines";
-import { collectTaskLines } from "../parse/task-lines";
+import { collectTaskLines, type TaskMarkerSpec } from "../parse/task-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { parseNoteDateKind, periodFromKey } from "../periods/period";
 import { dateKey } from "../periods/period";
@@ -24,6 +24,8 @@ export class VaultIndex {
 		private dailyDir: string,
 		/** 非 daily 日志目录（周/月/年）：开着「非daily任务计数」时其任务行并入统计 */
 		private extraTaskDirs: string[] = [],
+		/** 任务标识集（open/done 保留，cancel/nonTask 采集即丢弃） */
+		private taskSpec?: TaskMarkerSpec,
 	) {}
 
 	private filesUnder(dir: string): TFile[] {
@@ -52,7 +54,7 @@ export class VaultIndex {
 			for (const fl of parseFieldLines(text.split(/\r?\n/))) {
 				if (!(fl.key in fields)) fields[fl.key] = fl.value;
 			}
-			const taskLines = collectTaskLines(text.split(/\r?\n/));
+			const taskLines = collectTaskLines(text.split(/\r?\n/), this.taskSpec);
 			records.set(key, { date: key, fieldValues: fields, taskLines });
 		}
 		await this.appendNonDailyTasks(records, daySet);
@@ -73,7 +75,7 @@ export class VaultIndex {
 				const period = parseNoteDateKind(file.name);
 				if (period === null || period.kind === "day") continue;
 				const text = await this.app.vault.cachedRead(file);
-				for (const line of collectTaskLines(text.split(/\r?\n/))) {
+				for (const line of collectTaskLines(text.split(/\r?\n/), this.taskSpec)) {
 					const done = /✅\s*(\d{4}-\d{2}-\d{2})/.exec(line);
 					const fallback = periodFromKey(period.key);
 					const target =

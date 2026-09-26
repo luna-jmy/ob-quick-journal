@@ -13,7 +13,8 @@ export interface ParsedTaskLine {
 	createdDate?: string;
 }
 
-const TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+const TASK_RE = /^\s*[-*]\s+\[([^\]])\]\s*(.*)$/;
+export const DEFAULT_DONE_MARKERS = ["x", "X"];
 
 function extractDate(mark: string, body: string): string | undefined {
 	const re = new RegExp(`${mark}\\s*(\\d{4}-\\d{2}-\\d{2})`);
@@ -21,29 +22,44 @@ function extractDate(mark: string, body: string): string | undefined {
 	return m ? m[1] : undefined;
 }
 
-export function parseTaskLine(line: string): ParsedTaskLine | null {
+/** 勾选框字符（`- [x]` 的 x）；非任务行返回 null。 */
+export function statusCharOf(line: string): string | null {
+	const m = TASK_RE.exec(line);
+	return m ? m[1] : null;
+}
+
+export function parseTaskLine(line: string, doneMarkers: string[] = DEFAULT_DONE_MARKERS): ParsedTaskLine | null {
 	const m = TASK_RE.exec(line);
 	if (!m) return null;
 	const status = m[1];
 	const body = m[2];
 	return {
 		line,
-		done: status === "x" || status === "X",
+		done: doneMarkers.includes(status),
 		doneDate: extractDate("✅", body),
 		createdDate: extractDate("➕", body),
 	};
 }
 
-export function parseTaskLines(lines: string[]): ParsedTaskLine[] {
+export function parseTaskLines(lines: string[], doneMarkers: string[] = DEFAULT_DONE_MARKERS): ParsedTaskLine[] {
 	return lines
-		.map((l) => parseTaskLine(l))
+		.map((l) => parseTaskLine(l, doneMarkers))
 		.filter((t): t is ParsedTaskLine => t !== null);
 }
 
-const ANY_TASK_RE = /^\s*[-*]\s+\[([ xX/-])\]/;
+export interface TaskMarkerSpec {
+	open: string[];
+	done: string[];
+	cancel: string[];
+	nonTask: string[];
+}
 
-/** 采集任务行原文（统计用）：跳过 ``` 围栏内的内容——代码块里长得像任务的行不算数。 */
-export function collectTaskLines(lines: string[]): string[] {
+/**
+ * 采集任务行原文（统计用）：跳过 ``` 围栏；传入标识集时只保留
+ * open（含隐含空格）与 done 的行——cancel / nonTask / 未识别字符一律不采集（不计数）。
+ */
+export function collectTaskLines(lines: string[], spec?: TaskMarkerSpec): string[] {
+	const allowed = spec ? new Set([" ", ...spec.open, ...spec.done]) : null;
 	const out: string[] = [];
 	let inFence = false;
 	for (const line of lines) {
@@ -52,7 +68,10 @@ export function collectTaskLines(lines: string[]): string[] {
 			continue;
 		}
 		if (inFence) continue;
-		if (ANY_TASK_RE.test(line)) out.push(line);
+		const status = statusCharOf(line);
+		if (status === null) continue;
+		if (allowed !== null && !allowed.has(status)) continue;
+		out.push(line);
 	}
 	return out;
 }

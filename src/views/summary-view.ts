@@ -149,8 +149,8 @@ export class SummaryView extends ItemView {
 				id: "task-chart",
 				title: t("任务完成统计"),
 				render: (card, ctx) => {
-					const tasks = taskStats(ctx.days, ctx.records);
-					const done = doneByDay(ctx.days, ctx.records);
+					const tasks = taskStats(ctx.days, ctx.records, ctx.doneMarkers);
+					const done = doneByDay(ctx.days, ctx.records, ctx.doneMarkers);
 					renderTaskChart(card, ctx, [
 						{ label: t("完成"), value: String(tasks.doneInPeriod) },
 						{ label: t("新建"), value: String(tasks.createdInPeriod) },
@@ -181,7 +181,7 @@ export class SummaryView extends ItemView {
 					renderHeatmap(
 						card,
 						ctx,
-						doneByDay(ctx.days, ctx.records),
+						doneByDay(ctx.days, ctx.records, ctx.doneMarkers),
 						ctx.kind === "year" || ctx.kind === "quarter",
 					),
 			},
@@ -221,7 +221,12 @@ export class SummaryView extends ItemView {
 					.map((type) => config.journals[type].dir)
 					.filter((dir) => dir.trim() !== "")
 			: [];
-		const index = new VaultIndex(this.app, config.journals.daily.dir, extraDirs);
+		const index = new VaultIndex(
+			this.app,
+			config.journals.daily.dir,
+			extraDirs,
+			config.tasks.markers,
+		);
 		const days = this.period.days.map(dateKey);
 		const records = (await index.collectDayRecords(this.period.days)).records;
 
@@ -241,6 +246,7 @@ export class SummaryView extends ItemView {
 			days,
 			records,
 			entries,
+			doneMarkers: config.tasks.markers.done,
 			component: this,
 			editing: this.editing,
 			rerender: () => void this.render(),

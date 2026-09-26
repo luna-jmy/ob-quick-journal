@@ -70,8 +70,12 @@ export interface QJConfig {
 	panel: { showCompleted: boolean };
 	/** 统计偏好 */
 	stats: { includeNonDailyTasks: boolean };
-	/** 未完成任务滚动：除空格外计入未完成的勾选框字符（空格始终隐含包含） */
-	rollover: { openMarkers: string[] };
+	/**
+	 * 任务标识体系（勾选框字符，逗号分隔；空格始终隐含属于 open）：
+	 * open=未完成（滚动/未完成统计），done=完成统计，cancel=完全不计数，
+	 * nonTask=非任务（预留，当前同 cancel 不计数，后续有相应功能）
+	 */
+	tasks: { markers: { open: string[]; done: string[]; cancel: string[]; nonTask: string[] } };
 }
 
 export const BOOL_YES = "✔️";
@@ -203,7 +207,7 @@ export const DEFAULT_CONFIG: QJConfig = {
 	viewLocations: { summary: "tab", panel: "tab" },
 	panel: { showCompleted: true },
 	stats: { includeNonDailyTasks: true },
-	rollover: { openMarkers: [">"] },
+	tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -329,13 +333,29 @@ export function mergeConfig(saved: unknown): QJConfig {
 			base.panel.showCompleted = saved.panel.showCompleted;
 		}
 	}
-	if (isRecord(saved.rollover) && Array.isArray(saved.rollover.openMarkers)) {
-		const markers = saved.rollover.openMarkers as unknown[];
-		// 空格是隐含标配，不存配置（旧配置里带空格的自动剔除）
-		const cleaned = markers.filter(
-			(m): m is string => typeof m === "string" && m.length === 1 && m !== " ",
+	// 任务标识：旧 rollover.openMarkers 迁入 tasks.markers.open
+	const legacyRollover = isRecord(saved.rollover) ? saved.rollover.openMarkers : undefined;
+	if (isRecord(saved.tasks) || Array.isArray(legacyRollover)) {
+		const sanitizeMarkers = (value: unknown, stripSpace: boolean): string[] => {
+			if (!Array.isArray(value)) return [];
+			return value.filter(
+				(m): m is string =>
+					typeof m === "string" && m.length === 1 && (!stripSpace || m !== " "),
+			);
+		};
+		const savedTasksRaw = isRecord(saved.tasks) ? saved.tasks.markers : undefined;
+		const savedTasks = isRecord(savedTasksRaw) ? savedTasksRaw : undefined;
+		const open = sanitizeMarkers(
+			Array.isArray(legacyRollover) ? legacyRollover : savedTasks?.open,
+			true,
 		);
-		base.rollover.openMarkers = cleaned;
+		if (open.length > 0) base.tasks.markers.open = open;
+		const done = sanitizeMarkers(savedTasks?.done, false);
+		if (done.length > 0) base.tasks.markers.done = done;
+		const cancel = sanitizeMarkers(savedTasks?.cancel, false);
+		if (cancel.length > 0) base.tasks.markers.cancel = cancel;
+		const nonTask = sanitizeMarkers(savedTasks?.nonTask, false);
+		if (nonTask.length > 0) base.tasks.markers.nonTask = nonTask;
 	}
 	if (isRecord(saved.stats)) {
 		if (typeof saved.stats.includeNonDailyTasks === "boolean") {
