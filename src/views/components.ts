@@ -11,7 +11,7 @@ import type { SectionEntry } from "../parse/section-entries";
 import { taskSymbol } from "../parse/line-ops";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
-import { boolStats } from "../metrics/aggregate";
+import { boolStats, doneByDay } from "../metrics/aggregate";
 import type { DayRecord } from "../metrics/day-record";
 import { monthGrid } from "../periods/month-grid";
 import type { PeriodKind } from "../periods/period";
@@ -318,14 +318,8 @@ export function renderCalendar(card: HTMLElement, app: App, ctx: SummaryCtx): vo
 	grid.createDiv({ cls: "qj-cal-head", text: "W" });
 	for (const w of weekdays) grid.createDiv({ cls: "qj-cal-head", text: w });
 
-	const done = new Map<string, number>();
-	for (const [day, rec] of ctx.records) {
-		let n = 0;
-		for (const line of rec.taskLines) {
-			if (/^\s*[-*]\s+\[[xX]\]/.test(line)) n++;
-		}
-		if (n > 0) done.set(day, n);
-	}
+	// 完成口径与其余组件一致：✅ 完成日期优先，无日期按笔记归属日（doneByDay）
+	const done = doneByDay(ctx.days, ctx.records);
 	const today = dateKey(new Date());
 	const index = new VaultIndex(app, config.journals.daily.dir);
 	for (const week of monthGrid(year, month0)) {
