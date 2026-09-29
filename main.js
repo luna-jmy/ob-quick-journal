@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-26T15:36:44.446Z */
+/* Quick Journal — bundled 2026-09-29T12:43:40.608Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -546,6 +546,19 @@ function sectionRange(lines, headingIndex) {
 }
 
 // src/capture/plan.ts
+function currentFieldValues(lines, heading, keys) {
+  const values = {};
+  const headingIndex = findHeadingIndex(lines, heading);
+  if (headingIndex < 0) return values;
+  const range = sectionRange(lines, headingIndex);
+  for (let i = range.start; i < range.end; i++) {
+    const m = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const key = m[1].trim();
+    if (keys.includes(key) && !(key in values)) values[key] = m[2].trim();
+  }
+  return values;
+}
 function planFieldFill(lines, opts) {
   const headingIndex = findHeadingIndex(lines, opts.heading);
   if (headingIndex < 0) {
@@ -1471,6 +1484,17 @@ var CaptureService = class {
     const entries = collectEntries(dateStr, lines, [section]);
     return (_b = (_a = entries[0]) == null ? void 0 : _a.text) != null ? _b : "";
   }
+  /** 某天某标题区各字段当前值（打卡/数据/小结表单预填，改的是当前值而非每次从空开始）。 */
+  async sectionFieldValues(dateStr, section) {
+    const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "field", text: "" });
+    const lines = await this.readLines(path);
+    if (lines === null) return {};
+    return currentFieldValues(
+      lines,
+      section.heading,
+      section.fields.map((f) => f.key)
+    );
+  }
   async mutateEntry(section, entry, content) {
     var _a, _b, _c, _d;
     const path = this.entryPath(entry);
@@ -1513,18 +1537,20 @@ var CaptureService = class {
 // src/ui/capture-modal.ts
 var import_obsidian2 = require("obsidian");
 var CaptureModal = class extends import_obsidian2.Modal {
-  constructor(app, title, type, fields, onSubmit, initial = "") {
+  constructor(app, title, type, fields, onSubmit, initial = "", initialValues = {}) {
     super(app);
     this.title = title;
     this.type = type;
     this.fields = fields;
     this.onSubmit = onSubmit;
     this.initial = initial;
+    this.initialValues = initialValues;
     this.values = {};
     this.lineValue = "";
     this.boolState = {};
   }
   onOpen() {
+    var _a;
     this.titleEl.setText(this.title);
     const form = this.contentEl.createDiv({ cls: "qj-form" });
     if (this.type === "list" || this.type === "paragraph") {
@@ -1536,10 +1562,11 @@ var CaptureModal = class extends import_obsidian2.Modal {
       input.onchange = () => this.lineValue = input.value;
     } else {
       for (const field of this.fields) {
+        const current = (_a = this.initialValues[field.key]) != null ? _a : "";
         const row = form.createDiv({ cls: "qj-field" });
         row.createEl("label", { cls: "qj-field-label", text: field.label });
         if (this.type === "checkin") {
-          this.boolState[field.key] = "";
+          this.boolState[field.key] = current === BOOL_YES ? "yes" : current === BOOL_NO ? "no" : "";
           const seg = row.createDiv({ cls: "qj-boolseg" });
           for (const opt of [
             { id: "yes", label: BOOL_YES },
@@ -1550,6 +1577,7 @@ var CaptureModal = class extends import_obsidian2.Modal {
               text: opt.label
             });
             btn.type = "button";
+            if (this.boolState[field.key] === opt.id) btn.addClass("is-active");
             btn.onclick = () => {
               this.boolState[field.key] = this.boolState[field.key] === opt.id ? "" : opt.id;
               btn.toggleClass("is-active", this.boolState[field.key] === opt.id);
@@ -1558,9 +1586,17 @@ var CaptureModal = class extends import_obsidian2.Modal {
         } else if (this.type === "data") {
           const input = row.createEl("input", { cls: "qj-input", type: "number" });
           input.inputMode = "decimal";
+          if (current !== "") {
+            input.value = current;
+            this.values[field.key] = current;
+          }
           input.onchange = () => this.values[field.key] = input.value;
         } else {
           const input = row.createEl("input", { cls: "qj-input", type: "text" });
+          if (current !== "") {
+            input.value = current;
+            this.values[field.key] = current;
+          }
           input.onchange = () => this.values[field.key] = input.value;
         }
       }
@@ -2635,6 +2671,8 @@ var PanelView = class extends import_obsidian9.ItemView {
     this.searchText = "";
     /** 顶部功能区收起（手机端把内容区顶上来） */
     this.collapsed = false;
+    /** 录入目标日期（composer 日历按钮选择；默认今天） */
+    this.entryDate = /* @__PURE__ */ new Date();
     /** 日志文件变更 → 防抖刷新（obsidian 自带 debounce，取消语义清晰） */
     this.scheduleRefresh = (0, import_obsidian9.debounce)(() => void this.loadFeed(), 1200, true);
   }
@@ -2725,7 +2763,7 @@ var PanelView = class extends import_obsidian9.ItemView {
     const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
     rollBtn.type = "button";
     rollBtn.setAttribute("aria-label", t("\u6EDA\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1"));
-    (0, import_obsidian9.setIcon)(rollBtn, "calendar-clock");
+    (0, import_obsidian9.setIcon)(rollBtn, "arrow-right-to-line");
     rollBtn.onclick = () => void this.rollover();
     const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
     search.type = "search";
@@ -2755,6 +2793,28 @@ var PanelView = class extends import_obsidian9.ItemView {
     }
     const box = root.createDiv({ cls: "qj-composer" });
     const top = box.createDiv({ cls: "qj-composer-top" });
+    const dateBtn = top.createEl("button", { cls: "qj-composer-date" });
+    dateBtn.type = "button";
+    (0, import_obsidian9.setIcon)(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
+    const dateLabel = dateBtn.createSpan();
+    const updateDateLabel = () => {
+      dateLabel.setText(
+        dateKey(this.entryDate) === dateKey(/* @__PURE__ */ new Date()) ? t("\u4ECA\u5929") : dateKey(this.entryDate).slice(5)
+      );
+    };
+    updateDateLabel();
+    dateBtn.onclick = () => {
+      const picker = box.ownerDocument.createElement("input");
+      picker.type = "date";
+      picker.value = dateKey(this.entryDate);
+      picker.onchange = () => {
+        if (picker.value === "") return;
+        const [y, m, d] = picker.value.split("-").map(Number);
+        this.entryDate = new Date(y, m - 1, d);
+        updateDateLabel();
+      };
+      picker.click();
+    };
     if (targets.length > 1) {
       const dropdown = new import_obsidian9.DropdownComponent(top);
       dropdown.addOptions(
@@ -2875,14 +2935,14 @@ ${embed}` : embed;
     if (value === "") return;
     if (this.inputEl) this.inputEl.value = "";
     if (section.type === "paragraph") {
-      const today = dateKey(/* @__PURE__ */ new Date());
-      const existing = await this.plugin.capture.paragraphContent(today, section);
+      const day = dateKey(this.entryDate);
+      const existing = await this.plugin.capture.paragraphContent(day, section);
       if (existing !== "") {
         new EntryEditModal(this.app, section.heading.replace(/^#+\s*/, ""), existing, true, (content) => {
           void (async () => {
             const result2 = await this.plugin.capture.editEntry(
               section,
-              { date: today, sectionId: section.id, kind: "paragraph", text: existing },
+              { date: day, sectionId: section.id, kind: "paragraph", text: existing },
               content
             );
             if (!result2.ok) new import_obsidian9.Notice(this.entryError(result2.message));
@@ -2891,7 +2951,7 @@ ${embed}` : embed;
         }).open();
         return;
       }
-      await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true);
+      await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true, this.entryDate);
       await this.loadFeed();
       return;
     }
@@ -2899,7 +2959,7 @@ ${embed}` : embed;
       "daily",
       section,
       { values: {}, lineValue: value },
-      { overwrite: false }
+      { overwrite: false, now: this.entryDate }
     );
     if (result.ok) {
       await this.loadFeed();
@@ -2967,7 +3027,7 @@ ${embed}` : embed;
     for (const date of [...byDate.keys()].sort().reverse()) {
       const day = feed.createDiv({ cls: "qj-feed-day" });
       day.createSpan({ cls: "qj-feed-day-label", text: this.dayLabel(date) });
-      for (const entry of byDate.get(date)) {
+      for (const entry of [...byDate.get(date)].reverse()) {
         const section = sections.find((s) => s.id === entry.sectionId);
         if (!section) continue;
         this.renderItem(day, date, section, entry, (_a = sectionName.get(entry.sectionId)) != null ? _a : "");
@@ -3611,6 +3671,20 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       });
       return;
     }
+    if (section.fields.length > 0) {
+      void this.capture.sectionFieldValues(this.currentKey(type), section).then((values) => {
+        new CaptureModal(
+          this.app,
+          section.heading.replace(/^#+\s*/, ""),
+          section.type,
+          section.fields,
+          (payload) => void this.performCapture(type, section, payload, false),
+          "",
+          values
+        ).open();
+      });
+      return;
+    }
     new CaptureModal(
       this.app,
       section.heading.replace(/^#+\s*/, ""),
@@ -3630,8 +3704,8 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
     return String(now.getFullYear());
   }
   /** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */
-  async performCapture(type, section, payload, overwrite) {
-    const result = await this.capture.performSection(type, section, payload, { overwrite });
+  async performCapture(type, section, payload, overwrite, now) {
+    const result = await this.capture.performSection(type, section, payload, { overwrite, now });
     if (result.ok) {
       const note = result.created ? `${t("\u521B\u5EFA\u7B14\u8BB0")} \xB7 ` : "";
       new import_obsidian11.Notice(`${note}${t("\u5DF2\u5199\u5165")} ${result.path} (${result.writtenLines})`);

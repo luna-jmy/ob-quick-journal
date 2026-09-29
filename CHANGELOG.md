@@ -5,6 +5,10 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.0.0
+
+- 版本拉齐：0.x 测试期结束，首个正式版（内容同 0.12.x 累加）。
+
 ## 0.12.2
 
 ### 变更
