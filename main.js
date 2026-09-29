@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-29T12:43:40.608Z */
+/* Quick Journal — bundled 2026-09-29T23:30:39.759Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -310,6 +310,8 @@ var EN = {
   "\u5199\u5165\u5931\u8D25": "Write failed",
   "\u4EE5\u4E0B\u5B57\u6BB5\u5DF2\u6709\u503C\uFF0C\u8986\u76D6\u5199\u5165\uFF1F": "These fields already have values. Overwrite?",
   "\u8986\u76D6": "Overwrite",
+  "\u6E05\u7A7A\u5F53\u524D\u5185\u5BB9": "Clear current content",
+  "\u5DF2\u6E05\u7A7A": "Cleared",
   // ── 命令 / 视图 ──
   "\u6253\u5F00\u65E5\u5FD7\u6C47\u603B": "Open journal summary",
   "\u65E5\u5FD7\u6C47\u603B": "Journal summary",
@@ -1312,7 +1314,17 @@ async function ensureNote(app, path, skeleton) {
     } catch (e) {
     }
   }
-  return app.vault.create(path, skeleton);
+  const file = await app.vault.create(path, skeleton);
+  if (file.path === path) return file;
+  const original = app.vault.getAbstractFileByPath(path);
+  if (original instanceof import_obsidian.TFile) {
+    try {
+      await app.fileManager.trashFile(file);
+    } catch (e) {
+    }
+    return original;
+  }
+  return file;
 }
 async function readNoteText(app, path) {
   const file = app.vault.getAbstractFileByPath(path);
@@ -1339,11 +1351,16 @@ var CaptureService = class {
   notePath(type, now) {
     const journal = this.journal(type);
     const key = noteKeyFor(type, now, journal.filenameFormat);
-    const index = new VaultIndex(this.app, journal.dir);
-    const existing = type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
-    if (existing) return existing.path;
+    const file = this.noteFile(type, key);
+    if (file) return file.path;
     const dir = journal.dir.replace(/\/+$/, "");
     return `${dir}/${key}.md`;
+  }
+  /** 按期间键递归找已有笔记（归期感知：文件名或 frontmatter journal-date 命中即算）。 */
+  noteFile(type, key) {
+    const journal = this.journal(type);
+    const index = new VaultIndex(this.app, journal.dir);
+    return type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
   }
   /** 兼容旧调用（面板 / 日志定位用）。 */
   dailyPath(now) {
@@ -1355,22 +1372,19 @@ var CaptureService = class {
   async performSection(type, section, payload, opts) {
     var _a, _b;
     const now = (_a = opts.now) != null ? _a : /* @__PURE__ */ new Date();
-    const path = this.notePath(type, now);
-    let text;
+    const journal = this.journal(type);
+    const key = noteKeyFor(type, now, journal.filenameFormat);
+    const dir = journal.dir.replace(/\/+$/, "");
+    const target = `${dir}/${key}.md`;
+    let file = this.noteFile(type, key);
     let created = false;
-    try {
-      text = await readNoteText(this.app, path);
-    } catch (e) {
-      const skeleton = skeletonFor(
-        type,
-        now,
-        this.journal(type).sections,
-        this.journal(type).filenameFormat
-      );
-      const file = await ensureNote(this.app, path, skeleton);
-      created = true;
-      text = await this.app.vault.cachedRead(file);
+    if (file === null) {
+      const skeleton = skeletonFor(type, now, journal.sections, journal.filenameFormat);
+      file = await ensureNote(this.app, target, skeleton);
+      created = file.path === target;
     }
+    const path = file.path;
+    const text = await this.app.vault.cachedRead(file);
     let plan;
     if (section.type === "paragraph") {
       if (payload.lineValue === void 0 || payload.lineValue.trim() === "") {
@@ -1423,6 +1437,36 @@ var CaptureService = class {
       created,
       writtenLines: plan.edits.length + plan.creates.length
     };
+  }
+  /**
+   * 「清空当前内容」：把该标题区已有值的字段全部写回空值行。
+   * 显式操作不走覆盖确认；只清已存在的字段行，不给从未录过的字段补空行。
+   */
+  async clearSection(type, section, opts = {}) {
+    var _a;
+    const now = (_a = opts.now) != null ? _a : /* @__PURE__ */ new Date();
+    const key = noteKeyFor(type, now, this.journal(type).filenameFormat);
+    const file = this.noteFile(type, key);
+    if (file === null) {
+      return { ok: false, reason: "error", message: "note not found" };
+    }
+    const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
+    const keys = section.fields.map((f) => f.key);
+    const current = currentFieldValues(lines, section.heading, keys);
+    const targets = keys.filter((k) => k in current);
+    if (targets.length === 0) {
+      return { ok: true, path: file.path, created: false, writtenLines: 0 };
+    }
+    const plan = planFieldFill(lines, {
+      heading: section.heading,
+      headingMissingCreates: false,
+      values: targets.map((k) => ({ key: k, value: "" }))
+    });
+    if (plan.status === "error") {
+      return { ok: false, reason: "error", message: `${plan.reason}: ${plan.heading}` };
+    }
+    await applyPlanToFile(this.app, file.path, plan);
+    return { ok: true, path: file.path, created: false, writtenLines: plan.edits.length };
   }
   /** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */
   withTimestamp(section, value, now) {
@@ -1568,6 +1612,15 @@ var CaptureModal = class extends import_obsidian2.Modal {
         if (this.type === "checkin") {
           this.boolState[field.key] = current === BOOL_YES ? "yes" : current === BOOL_NO ? "no" : "";
           const seg = row.createDiv({ cls: "qj-boolseg" });
+          const buttons = {
+            yes: void 0,
+            no: void 0
+          };
+          const sync = () => {
+            var _a2, _b;
+            (_a2 = buttons.yes) == null ? void 0 : _a2.toggleClass("is-active", this.boolState[field.key] === "yes");
+            (_b = buttons.no) == null ? void 0 : _b.toggleClass("is-active", this.boolState[field.key] === "no");
+          };
           for (const opt of [
             { id: "yes", label: BOOL_YES },
             { id: "no", label: BOOL_NO }
@@ -1577,31 +1630,34 @@ var CaptureModal = class extends import_obsidian2.Modal {
               text: opt.label
             });
             btn.type = "button";
-            if (this.boolState[field.key] === opt.id) btn.addClass("is-active");
+            buttons[opt.id] = btn;
             btn.onclick = () => {
               this.boolState[field.key] = this.boolState[field.key] === opt.id ? "" : opt.id;
-              btn.toggleClass("is-active", this.boolState[field.key] === opt.id);
+              sync();
             };
           }
+          sync();
         } else if (this.type === "data") {
           const input = row.createEl("input", { cls: "qj-input", type: "number" });
           input.inputMode = "decimal";
-          if (current !== "") {
-            input.value = current;
-            this.values[field.key] = current;
-          }
+          if (current !== "") input.value = current;
           input.onchange = () => this.values[field.key] = input.value;
         } else {
           const input = row.createEl("input", { cls: "qj-input", type: "text" });
-          if (current !== "") {
-            input.value = current;
-            this.values[field.key] = current;
-          }
+          if (current !== "") input.value = current;
           input.onchange = () => this.values[field.key] = input.value;
         }
       }
     }
     const footer = form.createDiv({ cls: "qj-form-footer" });
+    if (this.fields.length > 0 && this.type !== "list" && this.type !== "paragraph") {
+      const clear = footer.createEl("button", { cls: "qj-btn qj-btn-danger", text: t("\u6E05\u7A7A\u5F53\u524D\u5185\u5BB9") });
+      clear.type = "button";
+      clear.onclick = () => {
+        this.onSubmit({ values: {}, clearAll: true });
+        this.close();
+      };
+    }
     const cancel = footer.createEl("button", { cls: "qj-btn", text: t("\u53D6\u6D88") });
     cancel.type = "button";
     cancel.onclick = () => this.close();
@@ -1612,12 +1668,17 @@ var CaptureModal = class extends import_obsidian2.Modal {
     submit.type = "button";
     (0, import_obsidian2.setIcon)(submit.createSpan({ cls: "qj-btn-icon" }), "check");
     submit.onclick = () => {
+      var _a2;
+      const merged = { ...this.values };
       for (const [key, state] of Object.entries(this.boolState)) {
-        if (state === "yes") this.values[key] = BOOL_YES;
-        else if (state === "no") this.values[key] = BOOL_NO;
-        else delete this.values[key];
+        if (state === "yes") merged[key] = BOOL_YES;
+        else if (state === "no") merged[key] = BOOL_NO;
       }
-      this.onSubmit({ values: { ...this.values }, lineValue: this.lineValue });
+      const changed = {};
+      for (const [key, value] of Object.entries(merged)) {
+        if (value !== ((_a2 = this.initialValues[key]) != null ? _a2 : "")) changed[key] = value;
+      }
+      this.onSubmit({ values: changed, lineValue: this.lineValue });
       this.close();
     };
   }
@@ -2807,12 +2868,22 @@ var PanelView = class extends import_obsidian9.ItemView {
       const picker = box.ownerDocument.createElement("input");
       picker.type = "date";
       picker.value = dateKey(this.entryDate);
+      picker.addClass("qj-hidden-input");
       picker.onchange = () => {
         if (picker.value === "") return;
         const [y, m, d] = picker.value.split("-").map(Number);
         this.entryDate = new Date(y, m - 1, d);
         updateDateLabel();
+        picker.remove();
       };
+      box.appendChild(picker);
+      if (typeof picker.showPicker === "function") {
+        try {
+          picker.showPicker();
+          return;
+        } catch (e) {
+        }
+      }
       picker.click();
     };
     if (targets.length > 1) {
@@ -3705,6 +3776,17 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
   }
   /** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */
   async performCapture(type, section, payload, overwrite, now) {
+    if (payload.clearAll === true) {
+      const cleared = await this.capture.clearSection(type, section, { now });
+      if (cleared.ok) {
+        new import_obsidian11.Notice(`${t("\u5DF2\u6E05\u7A7A")} ${cleared.path} (${cleared.writtenLines})`);
+      } else {
+        new import_obsidian11.Notice(
+          `${t("\u5199\u5165\u5931\u8D25")}: ${cleared.reason === "error" ? cleared.message : cleared.reason}`
+        );
+      }
+      return;
+    }
     const result = await this.capture.performSection(type, section, payload, { overwrite, now });
     if (result.ok) {
       const note = result.created ? `${t("\u521B\u5EFA\u7B14\u8BB0")} \xB7 ` : "";
