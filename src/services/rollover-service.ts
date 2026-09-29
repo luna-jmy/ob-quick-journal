@@ -9,7 +9,7 @@ import { planInsertLines } from "../capture/plan";
 import { skeletonFor } from "../capture/skeleton";
 import type { PeriodType, QJConfig } from "../types";
 import { dateKey } from "../periods/period";
-import { applyPlanToFile, ensureNote, readNoteText } from "./file-writer";
+import { applyPlanToFile, ensureNote } from "./file-writer";
 import { VaultIndex } from "./vault-index";
 
 export interface RolloverPreview {
@@ -43,6 +43,22 @@ export class RolloverService {
 		return `${this.dir("daily")}/${dateStr}.md`;
 	}
 
+	/**
+	 * 今天日日志（TFile 优先：递归子目录 + 归期感知）。
+	 * 此前按目录根拼路径——子目录/非标准文件名的日志被误判缺失时，
+	 * ensureNote 会在目录根另建平行笔记：任务「滚动后从日志消失、
+	 * 面板还在、跳转找不到」以及与 TaskMatrix 各写一个文件，都源于此。
+	 */
+	private async todayFile(now: Date): Promise<TFile> {
+		const existing = new VaultIndex(this.app, this.dir("daily")).dailyFile(dateKey(now));
+		if (existing) return existing;
+		return ensureNote(
+			this.app,
+			this.dailyPath(dateKey(now)),
+			skeletonFor("daily", now, this.getConfig().journals.daily.sections),
+		);
+	}
+
 	/** 往回找最近一期有未完成任务的日日志（不含今天；递归子目录，按归属日期倒序）。 */
 	async preview(now: Date): Promise<RolloverPreview | null> {
 		const markers = this.markers();
@@ -63,22 +79,12 @@ export class RolloverService {
 	/** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区）。 */
 	async perform(preview: RolloverPreview, now: Date): Promise<RolloverResult> {
 		const config = this.getConfig();
-		const todayPath = this.dailyPath(dateKey(now));
 
-		// 1. 确保今天笔记存在
-		try {
-			await readNoteText(this.app, todayPath);
-		} catch {
-			await ensureNote(this.app, todayPath, skeletonFor("daily", now, config.journals.daily.sections));
-		}
+		// 1. 解析今天笔记（TFile 优先，全链路只用 file.path——见 todayFile 注释）
+		const today = await this.todayFile(now);
+		const todayText = await this.app.vault.cachedRead(today);
 
 		// 2. 目标区：任务列表区（- [ ] 行模板）> 任一列表区 > 笔记末尾
-		let todayText: string;
-		try {
-			todayText = await readNoteText(this.app, todayPath);
-		} catch {
-			return { ok: false, message: `note not found: ${todayPath}` };
-		}
 		const sections = config.journals.daily.sections;
 		const target =
 			sections.find((s) => s.type === "list" && (s.lineTemplate ?? "").includes("[ ]")) ??
@@ -100,7 +106,7 @@ export class RolloverService {
 		if (plan.status !== "ok") {
 			return { ok: false, message: plan.reason };
 		}
-		await applyPlanToFile(this.app, todayPath, plan);
+		await applyPlanToFile(this.app, today.path, plan);
 
 		// 3. 源文件删除（原子，标记集与预览一致）
 		const markers = this.markers();

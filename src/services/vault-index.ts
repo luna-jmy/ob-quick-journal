@@ -42,7 +42,9 @@ export class VaultIndex {
 
 		for (const file of this.filesUnder(this.dailyDir)) {
 			const date = this.resolveDate(file);
-			if (date) byDate.set(date, file);
+			// 同一日期多文件（历史平行笔记）时首个命中——与 dailyFile 同口径，
+			// 否则「面板读 A 文件、跳转开 B 文件」
+			if (date && !byDate.has(date)) byDate.set(date, file);
 		}
 
 		for (const day of days) {
@@ -98,7 +100,8 @@ export class VaultIndex {
 		const byDate = new Map<string, TFile>();
 		for (const file of this.filesUnder(this.dailyDir)) {
 			const date = this.resolveDate(file);
-			if (date) byDate.set(date, file);
+			// 同一日期多文件时首个命中（与 dailyFile / collectDayRecords 同口径）
+			if (date && !byDate.has(date)) byDate.set(date, file);
 		}
 		const entries: SectionEntry[] = [];
 		for (const day of days) {

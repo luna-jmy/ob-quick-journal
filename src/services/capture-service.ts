@@ -220,7 +220,11 @@ export class CaptureService {
 	}
 
 	private entryPath(entry: SectionEntry): string {
-		return `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
+		// 递归解析（与面板读取同口径）：子目录/非标准名日志的行级写回不再落到根路径
+		const file = new VaultIndex(this.app, this.journal("daily").dir).dailyFile(entry.date);
+		return file
+			? file.path
+			: `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
 	}
 
 	private async readLines(path: string): Promise<string[] | null> {

@@ -6,4 +6,9 @@
 
 export class TFile {
 	constructor(public path: string) {}
+
+	/** 文件名部分（真实 TFile 的字段；VaultIndex 用 file.name 做归期识别） */
+	get name(): string {
+		return this.path.split("/").pop() ?? this.path;
+	}
 }
