@@ -44,12 +44,17 @@ export class CaptureService {
 	notePath(type: PeriodType, now: Date): string {
 		const journal = this.journal(type);
 		const key = noteKeyFor(type, now, journal.filenameFormat);
-		const index = new VaultIndex(this.app, journal.dir);
-		const existing =
-			type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
-		if (existing) return existing.path;
+		const file = this.noteFile(type, key);
+		if (file) return file.path;
 		const dir = journal.dir.replace(/\/+$/, "");
 		return `${dir}/${key}.md`;
+	}
+
+	/** 按期间键递归找已有笔记（归期感知：文件名或 frontmatter journal-date 命中即算）。 */
+	private noteFile(type: PeriodType, key: string): TFile | null {
+		const journal = this.journal(type);
+		const index = new VaultIndex(this.app, journal.dir);
+		return type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
 	}
 
 	/** 兼容旧调用（面板 / 日志定位用）。 */
@@ -68,23 +73,23 @@ export class CaptureService {
 		opts: { overwrite: boolean; now?: Date },
 	): Promise<CaptureResult> {
 		const now = opts.now ?? new Date();
-		const path = this.notePath(type, now);
+		const journal = this.journal(type);
+		const key = noteKeyFor(type, now, journal.filenameFormat);
+		const dir = journal.dir.replace(/\/+$/, "");
+		const target = `${dir}/${key}.md`;
 
-		let text: string;
+		// 先按已有笔记解析成 TFile 再读写（递归子目录 + 归期感知）。
+		// 曾出现过解析失配（索引未就绪）→ 误判缺失 → vault.create 落成
+		// YYYY-MM-DD(1).md 平行文件的事故，这里全链路只用 file.path 定位
+		let file: TFile | null = this.noteFile(type, key);
 		let created = false;
-		try {
-			text = await readNoteText(this.app, path);
-		} catch {
-			const skeleton = skeletonFor(
-				type,
-				now,
-				this.journal(type).sections,
-				this.journal(type).filenameFormat,
-			);
-			const file: TFile = await ensureNote(this.app, path, skeleton);
-			created = true;
-			text = await this.app.vault.cachedRead(file);
+		if (file === null) {
+			const skeleton = skeletonFor(type, now, journal.sections, journal.filenameFormat);
+			file = await ensureNote(this.app, target, skeleton);
+			created = file.path === target;
 		}
+		const path = file.path;
+		const text = await this.app.vault.cachedRead(file);
 
 		let plan: WritePlan;
 		if (section.type === "paragraph") {
@@ -141,6 +146,40 @@ export class CaptureService {
 			created,
 			writtenLines: plan.edits.length + plan.creates.length,
 		};
+	}
+
+	/**
+	 * 「清空当前内容」：把该标题区已有值的字段全部写回空值行。
+	 * 显式操作不走覆盖确认；只清已存在的字段行，不给从未录过的字段补空行。
+	 */
+	async clearSection(
+		type: PeriodType,
+		section: JournalSection,
+		opts: { now?: Date } = {},
+	): Promise<CaptureResult> {
+		const now = opts.now ?? new Date();
+		const key = noteKeyFor(type, now, this.journal(type).filenameFormat);
+		const file = this.noteFile(type, key);
+		if (file === null) {
+			return { ok: false, reason: "error", message: "note not found" };
+		}
+		const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
+		const keys = section.fields.map((f) => f.key);
+		const current = currentFieldValues(lines, section.heading, keys);
+		const targets = keys.filter((k) => k in current);
+		if (targets.length === 0) {
+			return { ok: true, path: file.path, created: false, writtenLines: 0 };
+		}
+		const plan = planFieldFill(lines, {
+			heading: section.heading,
+			headingMissingCreates: false,
+			values: targets.map((k) => ({ key: k, value: "" })),
+		});
+		if (plan.status === "error") {
+			return { ok: false, reason: "error", message: `${plan.reason}: ${plan.heading}` };
+		}
+		await applyPlanToFile(this.app, file.path, plan);
+		return { ok: true, path: file.path, created: false, writtenLines: plan.edits.length };
 	}
 
 	/** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */

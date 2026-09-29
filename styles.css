@@ -258,6 +258,17 @@
 	border-color: var(--interactive-accent);
 }
 
+/* 清空当前内容（破坏性操作，红字提示；推到页脚左侧与取消/提交分开） */
+.qj-btn-danger {
+	color: var(--text-error);
+	margin-right: auto;
+}
+
+.qj-btn-danger:hover {
+	background: var(--background-modifier-error);
+	border-color: var(--text-error);
+}
+
 .qj-btn-primary:hover {
 	background: var(--interactive-accent-hover);
 }
@@ -265,6 +276,11 @@
 .qj-btn-icon {
 	display: inline-flex;
 	margin-left: var(--size-2-1);
+}
+
+/* 日期选择 input：必须挂载进 DOM 才能弹窗，视觉上隐藏 */
+.qj-hidden-input {
+	display: none;
 }
 
 /* ── 动作选择 ──────────────────────────────────────────────────────────── */

@@ -19,7 +19,20 @@ export async function ensureNote(app: App, path: string, skeleton: string): Prom
 			// 已存在（并发）——继续
 		}
 	}
-	return app.vault.create(path, skeleton);
+	const file = await app.vault.create(path, skeleton);
+	if (file.path === path) return file;
+	// 路径解析失配（大小写差异、索引未就绪等）会让 create 落到 YYYY-MM-DD(1).md
+	// 平行副本——刚建的副本只含骨架，删掉并复用原笔记，绝不在用户日志旁留平行文件
+	const original = app.vault.getAbstractFileByPath(path);
+	if (original instanceof TFile) {
+		try {
+			await app.fileManager.trashFile(file);
+		} catch {
+			// 副本清理失败不阻塞：仍写回原笔记
+		}
+		return original;
+	}
+	return file;
 }
 
 export async function readNoteText(app: App, path: string): Promise<string> {

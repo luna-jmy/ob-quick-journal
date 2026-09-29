@@ -214,12 +214,25 @@ export class PanelView extends ItemView {
 			const picker = box.ownerDocument.createElement("input");
 			picker.type = "date";
 			picker.value = dateKey(this.entryDate);
+			// 需挂载进 DOM 才能弹窗，但视觉上隐藏（lint：样式走 class 不走 style）
+			picker.addClass("qj-hidden-input");
 			picker.onchange = () => {
 				if (picker.value === "") return;
 				const [y, m, d] = picker.value.split("-").map(Number);
 				this.entryDate = new Date(y, m - 1, d);
 				updateDateLabel();
+				picker.remove();
 			};
+			box.appendChild(picker);
+			// 未挂载的 date input 在 Electron 里 click() 不弹窗——挂载后走 showPicker()
+			if (typeof picker.showPicker === "function") {
+				try {
+					picker.showPicker();
+					return;
+				} catch {
+					// 无用户激活等场景回退 click()
+				}
+			}
 			picker.click();
 		};
 		if (targets.length > 1) {

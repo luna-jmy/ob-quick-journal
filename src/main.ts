@@ -153,10 +153,22 @@ export default class QuickJournalPlugin extends Plugin {
 	async performCapture(
 		type: PeriodType,
 		section: JournalSection,
-		payload: { values: Record<string, string>; lineValue?: string },
+		payload: { values: Record<string, string>; lineValue?: string; clearAll?: boolean },
 		overwrite: boolean,
 		now?: Date,
 	): Promise<void> {
+		if (payload.clearAll === true) {
+			// 「清空当前内容」：显式操作，直接清空，不走覆盖确认
+			const cleared = await this.capture.clearSection(type, section, { now });
+			if (cleared.ok) {
+				new Notice(`${t("已清空")} ${cleared.path} (${cleared.writtenLines})`);
+			} else {
+				new Notice(
+					`${t("写入失败")}: ${cleared.reason === "error" ? cleared.message : cleared.reason}`,
+				);
+			}
+			return;
+		}
 		const result = await this.capture.performSection(type, section, payload, { overwrite, now });
 		if (result.ok) {
 			const note = result.created ? `${t("创建笔记")} · ` : "";
