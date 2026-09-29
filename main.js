@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-29T23:30:39.759Z */
+/* Quick Journal — bundled 2026-09-29T23:45:27.091Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -1169,7 +1169,7 @@ var VaultIndex = class {
     const byDate = /* @__PURE__ */ new Map();
     for (const file of this.filesUnder(this.dailyDir)) {
       const date = this.resolveDate(file);
-      if (date) byDate.set(date, file);
+      if (date && !byDate.has(date)) byDate.set(date, file);
     }
     for (const day of days) {
       const key = dateKey(day);
@@ -1214,7 +1214,7 @@ var VaultIndex = class {
     const byDate = /* @__PURE__ */ new Map();
     for (const file of this.filesUnder(this.dailyDir)) {
       const date = this.resolveDate(file);
-      if (date) byDate.set(date, file);
+      if (date && !byDate.has(date)) byDate.set(date, file);
     }
     const entries = [];
     for (const day of days) {
@@ -1495,7 +1495,8 @@ var CaptureService = class {
     return this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
   }
   entryPath(entry) {
-    return `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
+    const file = new VaultIndex(this.app, this.journal("daily").dir).dailyFile(entry.date);
+    return file ? file.path : `${this.journal("daily").dir.replace(/\/+$/, "")}/${entry.date}.md`;
   }
   async readLines(path) {
     try {
@@ -2621,6 +2622,21 @@ var RolloverService = class {
   dailyPath(dateStr) {
     return `${this.dir("daily")}/${dateStr}.md`;
   }
+  /**
+   * 今天日日志（TFile 优先：递归子目录 + 归期感知）。
+   * 此前按目录根拼路径——子目录/非标准文件名的日志被误判缺失时，
+   * ensureNote 会在目录根另建平行笔记：任务「滚动后从日志消失、
+   * 面板还在、跳转找不到」以及与 TaskMatrix 各写一个文件，都源于此。
+   */
+  async todayFile(now) {
+    const existing = new VaultIndex(this.app, this.dir("daily")).dailyFile(dateKey(now));
+    if (existing) return existing;
+    return ensureNote(
+      this.app,
+      this.dailyPath(dateKey(now)),
+      skeletonFor("daily", now, this.getConfig().journals.daily.sections)
+    );
+  }
   /** 往回找最近一期有未完成任务的日日志（不含今天；递归子目录，按归属日期倒序）。 */
   async preview(now) {
     const markers = this.markers();
@@ -2641,18 +2657,8 @@ var RolloverService = class {
   async perform(preview, now) {
     var _a;
     const config = this.getConfig();
-    const todayPath = this.dailyPath(dateKey(now));
-    try {
-      await readNoteText(this.app, todayPath);
-    } catch (e) {
-      await ensureNote(this.app, todayPath, skeletonFor("daily", now, config.journals.daily.sections));
-    }
-    let todayText;
-    try {
-      todayText = await readNoteText(this.app, todayPath);
-    } catch (e) {
-      return { ok: false, message: `note not found: ${todayPath}` };
-    }
+    const today = await this.todayFile(now);
+    const todayText = await this.app.vault.cachedRead(today);
     const sections = config.journals.daily.sections;
     const target = (_a = sections.find((s) => {
       var _a2;
@@ -2672,7 +2678,7 @@ var RolloverService = class {
     if (plan.status !== "ok") {
       return { ok: false, message: plan.reason };
     }
-    await applyPlanToFile(this.app, todayPath, plan);
+    await applyPlanToFile(this.app, today.path, plan);
     const markers = this.markers();
     const sourceFile = this.app.vault.getAbstractFileByPath(preview.sourcePath);
     if (!(sourceFile instanceof import_obsidian7.TFile)) {
