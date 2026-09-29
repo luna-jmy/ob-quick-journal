@@ -114,6 +114,21 @@ export default class QuickJournalPlugin extends Plugin {
 				});
 			return;
 		}
+		if (section.fields.length > 0) {
+			// 打卡/数据/小结：预填当天现有值——改的是当前数据，而不是每次从空开始
+			void this.capture.sectionFieldValues(this.currentKey(type), section).then((values) => {
+				new CaptureModal(
+					this.app,
+					section.heading.replace(/^#+\s*/, ""),
+					section.type,
+					section.fields,
+					(payload) => void this.performCapture(type, section, payload, false),
+					"",
+					values,
+				).open();
+			});
+			return;
+		}
 		new CaptureModal(
 			this.app,
 			section.heading.replace(/^#+\s*/, ""),
@@ -140,8 +155,9 @@ export default class QuickJournalPlugin extends Plugin {
 		section: JournalSection,
 		payload: { values: Record<string, string>; lineValue?: string },
 		overwrite: boolean,
+		now?: Date,
 	): Promise<void> {
-		const result = await this.capture.performSection(type, section, payload, { overwrite });
+		const result = await this.capture.performSection(type, section, payload, { overwrite, now });
 		if (result.ok) {
 			const note = result.created ? `${t("创建笔记")} · ` : "";
 			new Notice(`${note}${t("已写入")} ${result.path} (${result.writtenLines})`);

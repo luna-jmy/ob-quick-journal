@@ -40,6 +40,8 @@ export class PanelView extends ItemView {
 	private searchText = "";
 	/** 顶部功能区收起（手机端把内容区顶上来） */
 	private collapsed = false;
+	/** 录入目标日期（composer 日历按钮选择；默认今天） */
+	private entryDate = new Date();
 
 	private get showDone(): boolean {
 		return this.plugin.config.panel.showCompleted;
@@ -156,7 +158,7 @@ export class PanelView extends ItemView {
 		const rollBtn = toolbar.createEl("button", { cls: "qj-btn qj-icon-btn" });
 		rollBtn.type = "button";
 		rollBtn.setAttribute("aria-label", t("滚动未完成任务"));
-		setIcon(rollBtn, "calendar-clock");
+		setIcon(rollBtn, "arrow-right-to-line");
 		rollBtn.onclick = () => void this.rollover();
 
 		const search = toolbar.createEl("input", { cls: "qj-input qj-search" });
@@ -192,9 +194,34 @@ export class PanelView extends ItemView {
 			this.targetId = targets[0].id;
 		}
 
-		// 卡片式录入区：目标行 / 自增高输入框 / 底部提示 + 发送
+		// 卡片式录入区：日期·目标行 / 自增高输入框 / 底部提示 + 发送
 		const box = root.createDiv({ cls: "qj-composer" });
 		const top = box.createDiv({ cls: "qj-composer-top" });
+		// 日期选择（默认今天）：写入目标日志的归属日
+		const dateBtn = top.createEl("button", { cls: "qj-composer-date" });
+		dateBtn.type = "button";
+		setIcon(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
+		const dateLabel = dateBtn.createSpan();
+		const updateDateLabel = () => {
+			dateLabel.setText(
+				dateKey(this.entryDate) === dateKey(new Date())
+					? t("今天")
+					: dateKey(this.entryDate).slice(5),
+			);
+		};
+		updateDateLabel();
+		dateBtn.onclick = () => {
+			const picker = box.ownerDocument.createElement("input");
+			picker.type = "date";
+			picker.value = dateKey(this.entryDate);
+			picker.onchange = () => {
+				if (picker.value === "") return;
+				const [y, m, d] = picker.value.split("-").map(Number);
+				this.entryDate = new Date(y, m - 1, d);
+				updateDateLabel();
+			};
+			picker.click();
+		};
 		if (targets.length > 1) {
 			const dropdown = new DropdownComponent(top);
 			dropdown.addOptions(
@@ -319,14 +346,14 @@ export class PanelView extends ItemView {
 
 		if (section.type === "paragraph") {
 			// 段落一天一条：已有内容 → 重发即编辑（预填），不再走覆盖确认
-			const today = dateKey(new Date());
-			const existing = await this.plugin.capture.paragraphContent(today, section);
+			const day = dateKey(this.entryDate);
+			const existing = await this.plugin.capture.paragraphContent(day, section);
 			if (existing !== "") {
 				new EntryEditModal(this.app, section.heading.replace(/^#+\s*/, ""), existing, true, (content) => {
 					void (async () => {
 						const result = await this.plugin.capture.editEntry(
 							section,
-							{ date: today, sectionId: section.id, kind: "paragraph", text: existing },
+							{ date: day, sectionId: section.id, kind: "paragraph", text: existing },
 							content,
 						);
 						if (!result.ok) new Notice(this.entryError(result.message));
@@ -335,7 +362,7 @@ export class PanelView extends ItemView {
 				}).open();
 				return;
 			}
-			await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true);
+			await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true, this.entryDate);
 			await this.loadFeed();
 			return;
 		}
@@ -344,7 +371,7 @@ export class PanelView extends ItemView {
 			"daily",
 			section,
 			{ values: {}, lineValue: value },
-			{ overwrite: false },
+			{ overwrite: false, now: this.entryDate },
 		);
 		if (result.ok) {
 			await this.loadFeed();
@@ -417,7 +444,8 @@ export class PanelView extends ItemView {
 		for (const date of [...byDate.keys()].sort().reverse()) {
 			const day = feed.createDiv({ cls: "qj-feed-day" });
 			day.createSpan({ cls: "qj-feed-day-label", text: this.dayLabel(date) });
-			for (const entry of byDate.get(date)!) {
+			// 展示按录入倒序（最新在最上）；笔记内的写入顺序不变
+			for (const entry of [...byDate.get(date)!].reverse()) {
 				const section = sections.find((s) => s.id === entry.sectionId);
 				if (!section) continue;
 				this.renderItem(day, date, section, entry, sectionName.get(entry.sectionId) ?? "");

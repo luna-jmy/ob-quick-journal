@@ -23,6 +23,8 @@ export class CaptureModal extends Modal {
 		private onSubmit: (payload: { values: Record<string, string>; lineValue?: string }) => void,
 		/** list / paragraph 预填内容（段落重发 = 编辑态） */
 		private initial = "",
+		/** 字段当前值（打卡/数据/小结预填；bool 用 ✔️/❌ 还原选中态） */
+		private initialValues: Record<string, string> = {},
 	) {
 		super(app);
 	}
@@ -40,10 +42,12 @@ export class CaptureModal extends Modal {
 			input.onchange = () => (this.lineValue = input.value);
 		} else {
 			for (const field of this.fields) {
+				const current = this.initialValues[field.key] ?? "";
 				const row = form.createDiv({ cls: "qj-field" });
 				row.createEl("label", { cls: "qj-field-label", text: field.label });
 				if (this.type === "checkin") {
-					this.boolState[field.key] = "";
+					this.boolState[field.key] =
+						current === BOOL_YES ? "yes" : current === BOOL_NO ? "no" : "";
 					const seg = row.createDiv({ cls: "qj-boolseg" });
 					for (const opt of [
 						{ id: "yes" as const, label: BOOL_YES },
@@ -54,6 +58,7 @@ export class CaptureModal extends Modal {
 							text: opt.label,
 						});
 						btn.type = "button";
+						if (this.boolState[field.key] === opt.id) btn.addClass("is-active");
 						btn.onclick = () => {
 							this.boolState[field.key] =
 								this.boolState[field.key] === opt.id ? "" : opt.id;
@@ -63,9 +68,17 @@ export class CaptureModal extends Modal {
 				} else if (this.type === "data") {
 					const input = row.createEl("input", { cls: "qj-input", type: "number" });
 					input.inputMode = "decimal";
+					if (current !== "") {
+						input.value = current;
+						this.values[field.key] = current;
+					}
 					input.onchange = () => (this.values[field.key] = input.value);
 				} else {
 					const input = row.createEl("input", { cls: "qj-input", type: "text" });
+					if (current !== "") {
+						input.value = current;
+						this.values[field.key] = current;
+					}
 					input.onchange = () => (this.values[field.key] = input.value);
 				}
 			}

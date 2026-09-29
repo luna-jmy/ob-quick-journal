@@ -7,6 +7,7 @@
 import { TFile, type App } from "obsidian";
 import type { JournalSection, PeriodType, QJConfig } from "../types";
 import {
+	currentFieldValues,
 	planAppend,
 	planDeleteLineAt,
 	planEditLineAt,
@@ -218,6 +219,21 @@ export class CaptureService {
 		// 段落条目的 text 即去掉时间戳后的整段内容
 		const entries = collectEntries(dateStr, lines, [section]);
 		return entries[0]?.text ?? "";
+	}
+
+	/** 某天某标题区各字段当前值（打卡/数据/小结表单预填，改的是当前值而非每次从空开始）。 */
+	async sectionFieldValues(
+		dateStr: string,
+		section: JournalSection,
+	): Promise<Record<string, string>> {
+		const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "field", text: "" });
+		const lines = await this.readLines(path);
+		if (lines === null) return {};
+		return currentFieldValues(
+			lines,
+			section.heading,
+			section.fields.map((f) => f.key),
+		);
 	}
 
 	private async mutateEntry(

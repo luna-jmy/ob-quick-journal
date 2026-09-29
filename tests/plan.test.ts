@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyPlan,
+	currentFieldValues,
 	planAppend,
 	planDeleteLineAt,
 	planEditLineAt,
@@ -199,5 +200,24 @@ describe("applyPlan 多行插入顺序", () => {
 			],
 		};
 		expect(applyPlan(note, plan)).toBe("A\nB\nB1\nC\nC1\nD");
+	});
+});
+
+describe("currentFieldValues（表单预填）", () => {
+	it("读取区段内各字段当前值；只取每个键第一次出现", () => {
+		const note = [
+			"# 日志",
+			"### 数据记录",
+			"- [weight⚖️:: 62]",
+			"- [reading🕓::]",
+			"## 其他",
+			"- [weight⚖️:: 99]",
+		].join("\n");
+		const values = currentFieldValues(note.split("\n"), "### 数据记录", [
+			"weight⚖️",
+			"reading🕓",
+			"spent💰",
+		]);
+		expect(values).toEqual({ "weight⚖️": "62", "reading🕓": "" });
 	});
 });

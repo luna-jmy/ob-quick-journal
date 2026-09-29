@@ -33,6 +33,25 @@ export type WritePlan =
 	  }
 	| { status: "error"; reason: "heading-not-found"; heading: string };
 
+/** 读取某天某标题区各字段的当前值（表单预填用；纯函数，传入笔记行）。 */
+export function currentFieldValues(
+	lines: string[],
+	heading: string,
+	keys: string[],
+): Record<string, string> {
+	const values: Record<string, string> = {};
+	const headingIndex = findHeadingIndex(lines, heading);
+	if (headingIndex < 0) return values;
+	const range = sectionRange(lines, headingIndex);
+	for (let i = range.start; i < range.end; i++) {
+		const m = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/.exec(lines[i]);
+		if (!m) continue;
+		const key = m[1].trim();
+		if (keys.includes(key) && !(key in values)) values[key] = m[2].trim();
+	}
+	return values;
+}
+
 export interface FillValue {
 	key: string;
 	value: string;
