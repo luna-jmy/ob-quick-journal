@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-30T12:26:57.829Z */
+/* Quick Journal — bundled 2026-09-30T14:42:41.355Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
