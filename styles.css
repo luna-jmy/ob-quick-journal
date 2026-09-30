@@ -358,6 +358,12 @@
 	min-height: 1.9em;
 }
 
+/* 日期按钮外壳：relative 供透明 input 定位锚定 */
+.qj-composer-date-wrap {
+	display: inline-flex;
+	position: relative;
+}
+
 .qj-composer-date {
 	display: inline-flex;
 	align-items: center;
@@ -369,17 +375,20 @@
 	font-size: var(--font-ui-smaller);
 	padding: 0 var(--size-2-2);
 	cursor: pointer;
-	position: relative;
+	box-shadow: none;
 }
 
-/* 透明 date input 盖满标签真实占位：原生日历锚定它的矩形在按钮位置打开 */
+/* 透明 date input 盖满按钮：只是原生日历的锚点。pointer-events 关掉、
+   不参与布局（min-width 归零，防 date input 固有宽度把按钮撑大），
+   点击由按钮 showPicker() 触发 */
 .qj-composer-date-input {
 	position: absolute;
 	inset: 0;
 	width: 100%;
 	height: 100%;
+	min-width: 0;
 	opacity: 0;
-	cursor: pointer;
+	pointer-events: none;
 }
 
 .qj-composer-date:hover {

@@ -198,17 +198,32 @@ export class PanelView extends ItemView {
 		const box = root.createDiv({ cls: "qj-composer" });
 		const top = box.createDiv({ cls: "qj-composer-top" });
 		// 日期选择（默认今天）：写入目标日志的归属日。
-		// 透明 date input 绝对定位盖在标签上、真实占位——原生日历锚定 input 的
-		// 矩形打开（display:none 的 input 没有矩形，PC 上会漂到视图左上角）
-		const dateBtn = top.createEl("label", { cls: "qj-composer-date" });
+		// 按钮负责展示与点击；透明 date input 挂在按钮外、绝对定位盖满按钮，
+		// 只做原生日历的锚点（display:none 的 input 没有矩形，PC 上会漂到
+		// 视图左上角）。桌面端点 input 本体不弹日历（只有它自带的 ▾ 指示器
+		// 会），所以由按钮在用户手势里调 showPicker() 打开。
+		const dateWrap = top.createSpan({ cls: "qj-composer-date-wrap" });
+		const dateBtn = dateWrap.createEl("button", {
+			cls: "qj-composer-date",
+			attr: { type: "button", "aria-label": t("录入日期") },
+		});
 		setIcon(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
 		const dateLabel = dateBtn.createSpan();
-		const dateInput = dateBtn.createEl("input", {
+		const dateInput = dateWrap.createEl("input", {
 			cls: "qj-composer-date-input",
 			type: "date",
-			attr: { "aria-label": t("录入日期") },
+			attr: { tabindex: "-1", "aria-hidden": "true" },
 		});
 		dateInput.value = dateKey(this.entryDate);
+		dateBtn.onclick = (evt) => {
+			evt.preventDefault();
+			try {
+				dateInput.showPicker();
+			} catch {
+				// 内核拒绝 showPicker 时退回聚焦
+				dateInput.focus();
+			}
+		};
 		const updateDateLabel = () => {
 			dateLabel.setText(
 				dateKey(this.entryDate) === dateKey(new Date())
