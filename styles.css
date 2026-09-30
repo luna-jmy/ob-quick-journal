@@ -278,11 +278,6 @@
 	margin-left: var(--size-2-1);
 }
 
-/* 日期选择 input：必须挂载进 DOM 才能弹窗，视觉上隐藏 */
-.qj-hidden-input {
-	display: none;
-}
-
 /* ── 动作选择 ──────────────────────────────────────────────────────────── */
 
 .qj-action-list {
@@ -373,6 +368,17 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	padding: 0 var(--size-2-2);
+	cursor: pointer;
+	position: relative;
+}
+
+/* 透明 date input 盖满标签真实占位：原生日历锚定它的矩形在按钮位置打开 */
+.qj-composer-date-input {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0;
 	cursor: pointer;
 }
 

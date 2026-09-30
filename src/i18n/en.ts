@@ -31,6 +31,7 @@ export const EN: Record<string, string> = {
 	"覆盖": "Overwrite",
 	"清空当前内容": "Clear current content",
 	"已清空": "Cleared",
+	"录入日期": "Entry date",
 	// ── 命令 / 视图 ──
 	"打开日志汇总": "Open journal summary",
 	"日志汇总": "Journal summary",

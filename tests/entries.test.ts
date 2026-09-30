@@ -89,6 +89,19 @@ describe("归档标识（[archive:: …]）", () => {
 		expect(entries).toHaveLength(1);
 		expect(entries[0]).toMatchObject({ time: "08:44", text: "普通条目" });
 	});
+
+	it("随手记段落首行带归档标识的整段不进面板", () => {
+		const note = [
+			"# 日志",
+			"## 今日随笔",
+			"20:30 已归档的随手记首行 [archive:: true]",
+			"第二行也一起隐藏。",
+		].join("\n");
+		const sections: JournalSection[] = [
+			{ id: "diary", heading: "## 今日随笔", type: "paragraph", fields: [] },
+		];
+		expect(collectEntries("2026-09-26", note.split("\n"), sections)).toEqual([]);
+	});
 });
 
 describe("时间戳与段落", () => {

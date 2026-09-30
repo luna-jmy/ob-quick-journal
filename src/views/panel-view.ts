@@ -197,11 +197,18 @@ export class PanelView extends ItemView {
 		// 卡片式录入区：日期·目标行 / 自增高输入框 / 底部提示 + 发送
 		const box = root.createDiv({ cls: "qj-composer" });
 		const top = box.createDiv({ cls: "qj-composer-top" });
-		// 日期选择（默认今天）：写入目标日志的归属日
-		const dateBtn = top.createEl("button", { cls: "qj-composer-date" });
-		dateBtn.type = "button";
+		// 日期选择（默认今天）：写入目标日志的归属日。
+		// 透明 date input 绝对定位盖在标签上、真实占位——原生日历锚定 input 的
+		// 矩形打开（display:none 的 input 没有矩形，PC 上会漂到视图左上角）
+		const dateBtn = top.createEl("label", { cls: "qj-composer-date" });
 		setIcon(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
 		const dateLabel = dateBtn.createSpan();
+		const dateInput = dateBtn.createEl("input", {
+			cls: "qj-composer-date-input",
+			type: "date",
+			attr: { "aria-label": t("录入日期") },
+		});
+		dateInput.value = dateKey(this.entryDate);
 		const updateDateLabel = () => {
 			dateLabel.setText(
 				dateKey(this.entryDate) === dateKey(new Date())
@@ -210,30 +217,11 @@ export class PanelView extends ItemView {
 			);
 		};
 		updateDateLabel();
-		dateBtn.onclick = () => {
-			const picker = box.ownerDocument.createElement("input");
-			picker.type = "date";
-			picker.value = dateKey(this.entryDate);
-			// 需挂载进 DOM 才能弹窗，但视觉上隐藏（lint：样式走 class 不走 style）
-			picker.addClass("qj-hidden-input");
-			picker.onchange = () => {
-				if (picker.value === "") return;
-				const [y, m, d] = picker.value.split("-").map(Number);
-				this.entryDate = new Date(y, m - 1, d);
-				updateDateLabel();
-				picker.remove();
-			};
-			box.appendChild(picker);
-			// 未挂载的 date input 在 Electron 里 click() 不弹窗——挂载后走 showPicker()
-			if (typeof picker.showPicker === "function") {
-				try {
-					picker.showPicker();
-					return;
-				} catch {
-					// 无用户激活等场景回退 click()
-				}
-			}
-			picker.click();
+		dateInput.onchange = () => {
+			if (dateInput.value === "") return;
+			const [y, m, d] = dateInput.value.split("-").map(Number);
+			this.entryDate = new Date(y, m - 1, d);
+			updateDateLabel();
 		};
 		if (targets.length > 1) {
 			const dropdown = new DropdownComponent(top);
@@ -496,7 +484,7 @@ export class PanelView extends ItemView {
 		if (entry.time) meta.createSpan({ cls: "qj-feed-time", text: entry.time });
 
 		const actions = head.createDiv({ cls: "qj-feed-actions" });
-		// 列表行：任务/列表互转、归档（行尾 [archive:: true]，面板隐藏）
+		// 列表行：任务/列表互转；列表行与随手记段落都可归档（行尾 [archive:: true]，面板隐藏）
 		if (entry.kind === "line") {
 			this.actionButton(actions, "repeat", t("任务/列表互转"), () => {
 				void (async () => {
@@ -505,6 +493,8 @@ export class PanelView extends ItemView {
 					await this.loadFeed();
 				})();
 			});
+		}
+		if (entry.kind === "line" || entry.kind === "paragraph") {
 			this.actionButton(actions, "archive", t("归档"), () => {
 				void (async () => {
 					const r = await this.plugin.capture.archiveEntry(section, entry);

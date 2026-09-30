@@ -93,6 +93,10 @@ export function collectEntries(
 			while (content.length > 0 && content[content.length - 1] === "") content.pop();
 			if (content.every((l) => l === "")) continue;
 			const firstIdx = content.findIndex((l) => l !== "");
+			// 段落归档标记加在首行行尾，与行条目同构；带标记的段落不进面板
+			const stripped = stripArchive(content[firstIdx]);
+			if (stripped.archived) continue;
+			content[firstIdx] = stripped.line;
 			const ts = splitTimestamp(content[firstIdx]);
 			if (ts.time !== undefined) content[firstIdx] = ts.text;
 			out.push({

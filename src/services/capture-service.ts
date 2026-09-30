@@ -17,7 +17,7 @@ import {
 } from "../capture/plan";
 import { noteKeyFor, skeletonFor } from "../capture/skeleton";
 import { VaultIndex } from "./vault-index";
-import { renderFieldLine } from "../parse/field-lines";
+import { findHeadingIndex, renderFieldLine, sectionRange } from "../parse/field-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { convertListTask, toggleTaskLine } from "../parse/line-ops";
 import { dateKey } from "../periods/period";
@@ -99,7 +99,7 @@ export class CaptureService {
 			plan = planParagraph(text.split(/\r?\n/), {
 				heading: section.heading,
 				headingMissingCreates: true,
-				text: this.withTimestamp(section, payload.lineValue, now),
+				text: this.withTimestamp(section, payload.lineValue),
 			});
 		} else if (section.type === "list") {
 			if (payload.lineValue === undefined || payload.lineValue.trim() === "") {
@@ -108,7 +108,7 @@ export class CaptureService {
 			const template = section.lineTemplate ?? "- {{value}}";
 			const line = template.replaceAll(
 				"{{value}}",
-				this.withTimestamp(section, payload.lineValue, now),
+				this.withTimestamp(section, payload.lineValue),
 			);
 			plan = planAppend(text.split(/\r?\n/), {
 				heading: section.heading,
@@ -182,11 +182,16 @@ export class CaptureService {
 		return { ok: true, path: file.path, created: false, writtenLines: plan.edits.length };
 	}
 
-	/** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */
-	private withTimestamp(section: JournalSection, value: string, now: Date): string {
+	/**
+	 * 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。
+	 * 取录入当下的钟表时间，与目标日志日解耦——「现在」是选择器选出的归属日
+	 *（零点），跟着它走会把时间戳全写成 00:00。
+	 */
+	private withTimestamp(section: JournalSection, value: string): string {
 		if (section.timestamp !== true) return value;
-		const hh = String(now.getHours()).padStart(2, "0");
-		const mm = String(now.getMinutes()).padStart(2, "0");
+		const at = new Date();
+		const hh = String(at.getHours()).padStart(2, "0");
+		const mm = String(at.getMinutes()).padStart(2, "0");
 		return `${hh}:${mm} ${value}`;
 	}
 
@@ -216,7 +221,43 @@ export class CaptureService {
 
 	/** 归档（面板隐藏）：行尾追加 [archive:: true]（dataview 内联字段，可被外部识别）。 */
 	async archiveEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
-		return this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
+		return entry.kind === "paragraph"
+			? this.archiveParagraph(section, entry)
+			: this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
+	}
+
+	/**
+	 * 段落归档：标记加在段落首个非空行行尾（一天一条，区段正文即该条内容）。
+	 * 首行做过期校验：与面板看到的条目首行不一致就拒绝，防错行。
+	 */
+	private async archiveParagraph(
+		section: JournalSection,
+		entry: SectionEntry,
+	): Promise<EntryWriteResult> {
+		const lines = await this.readLines(this.entryPath(entry));
+		if (lines === null) return { ok: false, message: `note not found: ${entry.date}` };
+		const headingIndex = findHeadingIndex(lines, section.heading);
+		if (headingIndex < 0) {
+			return { ok: false, message: `heading-not-found: ${section.heading}` };
+		}
+		const range = sectionRange(lines, headingIndex);
+		let idx = -1;
+		for (let i = range.start; i < range.end; i++) {
+			if (lines[i].trim() !== "") {
+				idx = i;
+				break;
+			}
+		}
+		if (idx === -1) return { ok: false, message: "empty section" };
+		const noteFirst = lines[idx].replace(/^\d{1,2}:\d{2}(:\d{2})?\s+/, "").trimEnd();
+		const entryFirst = (entry.text.split(/\r?\n/)[0] ?? "").trimEnd();
+		if (noteFirst !== entryFirst) return { ok: false, message: "stale-line" };
+		await applyPlanToFile(
+			this.app,
+			this.entryPath(entry),
+			planEditLineAt(idx, `${lines[idx]} [archive:: true]`),
+		);
+		return { ok: true };
 	}
 
 	private entryPath(entry: SectionEntry): string {
