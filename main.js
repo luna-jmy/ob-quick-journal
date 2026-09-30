@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-29T23:45:27.091Z */
+/* Quick Journal — bundled 2026-09-30T11:39:51.851Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -312,6 +312,7 @@ var EN = {
   "\u8986\u76D6": "Overwrite",
   "\u6E05\u7A7A\u5F53\u524D\u5185\u5BB9": "Clear current content",
   "\u5DF2\u6E05\u7A7A": "Cleared",
+  "\u5F55\u5165\u65E5\u671F": "Entry date",
   // ── 命令 / 视图 ──
   "\u6253\u5F00\u65E5\u5FD7\u6C47\u603B": "Open journal summary",
   "\u65E5\u5FD7\u6C47\u603B": "Journal summary",
@@ -1068,6 +1069,9 @@ function collectEntries(date, lines, sections) {
       while (content.length > 0 && content[content.length - 1] === "") content.pop();
       if (content.every((l) => l === "")) continue;
       const firstIdx = content.findIndex((l) => l !== "");
+      const stripped = stripArchive(content[firstIdx]);
+      if (stripped.archived) continue;
+      content[firstIdx] = stripped.line;
       const ts = splitTimestamp(content[firstIdx]);
       if (ts.time !== void 0) content[firstIdx] = ts.text;
       out.push({
@@ -1393,7 +1397,7 @@ var CaptureService = class {
       plan = planParagraph(text.split(/\r?\n/), {
         heading: section.heading,
         headingMissingCreates: true,
-        text: this.withTimestamp(section, payload.lineValue, now)
+        text: this.withTimestamp(section, payload.lineValue)
       });
     } else if (section.type === "list") {
       if (payload.lineValue === void 0 || payload.lineValue.trim() === "") {
@@ -1402,7 +1406,7 @@ var CaptureService = class {
       const template = (_b = section.lineTemplate) != null ? _b : "- {{value}}";
       const line = template.replaceAll(
         "{{value}}",
-        this.withTimestamp(section, payload.lineValue, now)
+        this.withTimestamp(section, payload.lineValue)
       );
       plan = planAppend(text.split(/\r?\n/), {
         heading: section.heading,
@@ -1468,11 +1472,16 @@ var CaptureService = class {
     await applyPlanToFile(this.app, file.path, plan);
     return { ok: true, path: file.path, created: false, writtenLines: plan.edits.length };
   }
-  /** 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。仅 daily。 */
-  withTimestamp(section, value, now) {
+  /**
+   * 时间戳单点：开启后 list / paragraph 的写入内容前加 HH:mm（面板解析显示）。
+   * 取录入当下的钟表时间，与目标日志日解耦——「现在」是选择器选出的归属日
+   *（零点），跟着它走会把时间戳全写成 00:00。
+   */
+  withTimestamp(section, value) {
     if (section.timestamp !== true) return value;
-    const hh = String(now.getHours()).padStart(2, "0");
-    const mm = String(now.getMinutes()).padStart(2, "0");
+    const at = /* @__PURE__ */ new Date();
+    const hh = String(at.getHours()).padStart(2, "0");
+    const mm = String(at.getMinutes()).padStart(2, "0");
     return `${hh}:${mm} ${value}`;
   }
   // ── 速记面板的条目级写回（编辑 / 删除 / 切换，不跳回日志） ───────────────
@@ -1492,7 +1501,38 @@ var CaptureService = class {
   }
   /** 归档（面板隐藏）：行尾追加 [archive:: true]（dataview 内联字段，可被外部识别）。 */
   async archiveEntry(section, entry) {
-    return this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
+    return entry.kind === "paragraph" ? this.archiveParagraph(section, entry) : this.rewriteRawLine(entry, (raw) => `${raw} [archive:: true]`);
+  }
+  /**
+   * 段落归档：标记加在段落首个非空行行尾（一天一条，区段正文即该条内容）。
+   * 首行做过期校验：与面板看到的条目首行不一致就拒绝，防错行。
+   */
+  async archiveParagraph(section, entry) {
+    var _a;
+    const lines = await this.readLines(this.entryPath(entry));
+    if (lines === null) return { ok: false, message: `note not found: ${entry.date}` };
+    const headingIndex = findHeadingIndex(lines, section.heading);
+    if (headingIndex < 0) {
+      return { ok: false, message: `heading-not-found: ${section.heading}` };
+    }
+    const range = sectionRange(lines, headingIndex);
+    let idx = -1;
+    for (let i = range.start; i < range.end; i++) {
+      if (lines[i].trim() !== "") {
+        idx = i;
+        break;
+      }
+    }
+    if (idx === -1) return { ok: false, message: "empty section" };
+    const noteFirst = lines[idx].replace(/^\d{1,2}:\d{2}(:\d{2})?\s+/, "").trimEnd();
+    const entryFirst = ((_a = entry.text.split(/\r?\n/)[0]) != null ? _a : "").trimEnd();
+    if (noteFirst !== entryFirst) return { ok: false, message: "stale-line" };
+    await applyPlanToFile(
+      this.app,
+      this.entryPath(entry),
+      planEditLineAt(idx, `${lines[idx]} [archive:: true]`)
+    );
+    return { ok: true };
   }
   entryPath(entry) {
     const file = new VaultIndex(this.app, this.journal("daily").dir).dailyFile(entry.date);
@@ -2860,37 +2900,26 @@ var PanelView = class extends import_obsidian9.ItemView {
     }
     const box = root.createDiv({ cls: "qj-composer" });
     const top = box.createDiv({ cls: "qj-composer-top" });
-    const dateBtn = top.createEl("button", { cls: "qj-composer-date" });
-    dateBtn.type = "button";
+    const dateBtn = top.createEl("label", { cls: "qj-composer-date" });
     (0, import_obsidian9.setIcon)(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
     const dateLabel = dateBtn.createSpan();
+    const dateInput = dateBtn.createEl("input", {
+      cls: "qj-composer-date-input",
+      type: "date",
+      attr: { "aria-label": t("\u5F55\u5165\u65E5\u671F") }
+    });
+    dateInput.value = dateKey(this.entryDate);
     const updateDateLabel = () => {
       dateLabel.setText(
         dateKey(this.entryDate) === dateKey(/* @__PURE__ */ new Date()) ? t("\u4ECA\u5929") : dateKey(this.entryDate).slice(5)
       );
     };
     updateDateLabel();
-    dateBtn.onclick = () => {
-      const picker = box.ownerDocument.createElement("input");
-      picker.type = "date";
-      picker.value = dateKey(this.entryDate);
-      picker.addClass("qj-hidden-input");
-      picker.onchange = () => {
-        if (picker.value === "") return;
-        const [y, m, d] = picker.value.split("-").map(Number);
-        this.entryDate = new Date(y, m - 1, d);
-        updateDateLabel();
-        picker.remove();
-      };
-      box.appendChild(picker);
-      if (typeof picker.showPicker === "function") {
-        try {
-          picker.showPicker();
-          return;
-        } catch (e) {
-        }
-      }
-      picker.click();
+    dateInput.onchange = () => {
+      if (dateInput.value === "") return;
+      const [y, m, d] = dateInput.value.split("-").map(Number);
+      this.entryDate = new Date(y, m - 1, d);
+      updateDateLabel();
     };
     if (targets.length > 1) {
       const dropdown = new import_obsidian9.DropdownComponent(top);
@@ -3142,6 +3171,8 @@ ${embed}` : embed;
           await this.loadFeed();
         })();
       });
+    }
+    if (entry.kind === "line" || entry.kind === "paragraph") {
       this.actionButton(actions, "archive", t("\u5F52\u6863"), () => {
         void (async () => {
           const r = await this.plugin.capture.archiveEntry(section, entry);
