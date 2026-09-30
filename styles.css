@@ -532,6 +532,21 @@
 	overflow-y: auto;
 	font-size: var(--font-ui-small);
 	border-radius: var(--radius-s);
+	/* 覆盖 .qj-feed-text 的 pre-wrap：渲染出的块级元素之间夹着换行文本
+	   节点，pre-wrap 会把它们显示成空行；段落间距改由元素自身 margin
+	   控制（见下方 p/ul/ol 规则），代码块内部的 pre 自带 pre-wrap */
+	white-space: normal;
+	line-height: 1.5;
+}
+
+.qj-feed-text--md p,
+.qj-feed-text--md ul,
+.qj-feed-text--md ol {
+	margin: 0 0 var(--size-2-1);
+}
+
+.qj-feed-text--md > :last-child {
+	margin-bottom: 0;
 }
 
 .qj-feed-text--md img {
