@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-30T11:54:48.451Z */
+/* Quick Journal — bundled 2026-09-30T12:26:57.829Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -2900,38 +2900,16 @@ var PanelView = class extends import_obsidian9.ItemView {
     }
     const box = root.createDiv({ cls: "qj-composer" });
     const top = box.createDiv({ cls: "qj-composer-top" });
-    const dateWrap = top.createSpan({ cls: "qj-composer-date-wrap" });
-    const dateBtn = dateWrap.createEl("button", {
-      cls: "qj-composer-date",
-      attr: { type: "button", "aria-label": t("\u5F55\u5165\u65E5\u671F") }
-    });
-    (0, import_obsidian9.setIcon)(dateBtn.createSpan({ cls: "qj-btn-icon" }), "calendar-days");
-    const dateLabel = dateBtn.createSpan();
-    const dateInput = dateWrap.createEl("input", {
+    const dateInput = top.createEl("input", {
       cls: "qj-composer-date-input",
       type: "date",
-      attr: { tabindex: "-1", "aria-hidden": "true" }
+      attr: { "aria-label": t("\u5F55\u5165\u65E5\u671F") }
     });
     dateInput.value = dateKey(this.entryDate);
-    dateBtn.onclick = (evt) => {
-      evt.preventDefault();
-      try {
-        dateInput.showPicker();
-      } catch (e) {
-        dateInput.focus();
-      }
-    };
-    const updateDateLabel = () => {
-      dateLabel.setText(
-        dateKey(this.entryDate) === dateKey(/* @__PURE__ */ new Date()) ? t("\u4ECA\u5929") : dateKey(this.entryDate).slice(5)
-      );
-    };
-    updateDateLabel();
     dateInput.onchange = () => {
       if (dateInput.value === "") return;
       const [y, m, d] = dateInput.value.split("-").map(Number);
       this.entryDate = new Date(y, m - 1, d);
-      updateDateLabel();
     };
     if (targets.length > 1) {
       const dropdown = new import_obsidian9.DropdownComponent(top);

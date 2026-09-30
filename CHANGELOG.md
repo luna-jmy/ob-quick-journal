@@ -5,6 +5,15 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.0.5
+
+### 修复
+
+- **速记面板日期弹窗仍有漂移、标题下拉前有大段空白**：弃用「按钮 +
+  透明锚点 input + showPicker」的绕法，改为 TaskMatrix 筛选栏同款的
+  真实可见原生 date input——原生日历直接锚定输入框矩形、紧贴其下方
+  左对齐打开，布局中不再有隐形元素，下拉紧随其后。
+
 ## 1.0.4
 
 ### 修复
