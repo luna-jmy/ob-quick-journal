@@ -3,6 +3,8 @@
 移动优先的日志快速录入插件：点一个按钮、填一个表单，打卡 / 数据 / 小结直接写进
 当天日志的对应标题区，全程不进 markdown 编辑模式。周 / 月 / 年汇总视图随时打开即得。
 
+**在线文档**：<https://luna-jmy.github.io/ob-plugin-docs/zh-cn/quick-journal/>
+
 ## 依赖
 
 **无需任何其他插件**：解析、统计、界面全部插件内实现。后续版本接入的 Dataview / Tasks /
