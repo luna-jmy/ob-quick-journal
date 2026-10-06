@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-10-06T05:58:17.464Z */
+/* Quick Journal — bundled 2026-10-06T06:17:11.465Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -2060,9 +2060,17 @@ var TYPE_PREFIX = {
   monthly: "\u6708 \xB7 ",
   annual: "\u5E74 \xB7 "
 };
+var PERIOD_KIND_TO_TYPE = {
+  week: "weekly",
+  month: "monthly",
+  quarter: "annual",
+  year: "annual"
+};
 function renderQuickCapture(card, ctx) {
   const row = card.createDiv({ cls: "qj-capture-row" });
-  for (const type of ["daily", "weekly", "monthly", "annual"]) {
+  const periodType = PERIOD_KIND_TO_TYPE[ctx.kind];
+  const types = periodType === void 0 ? ["daily"] : ["daily", periodType];
+  for (const type of types) {
     for (const section of ctx.plugin.config.journals[type].sections) {
       const btn = row.createEl("button", {
         cls: "qj-btn",
@@ -2262,14 +2270,8 @@ function createSvgEl(host, tag, attrs) {
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
 }
-var RADAR_KIND_TO_TYPE = {
-  week: "weekly",
-  month: "monthly",
-  quarter: "annual",
-  year: "annual"
-};
 async function renderRadar(card, app, ctx) {
-  const type = RADAR_KIND_TO_TYPE[ctx.kind];
+  const type = PERIOD_KIND_TO_TYPE[ctx.kind];
   const journal = type !== void 0 ? ctx.plugin.config.journals[type] : null;
   const sections = journal !== null ? journal.sections.filter((s) => s.type === "compare" && s.compare !== void 0) : [];
   if (sections.length === 0) {
