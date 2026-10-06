@@ -22,6 +22,7 @@ import { RolloverService } from "../services/rollover-service";
 import type { SectionEntry } from "../parse/section-entries";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { EntryEditModal } from "../ui/entry-edit-modal";
+import { insertImageAttachment } from "../ui/attachments";
 import { dateKey } from "../periods/period";
 import { t } from "../i18n";
 
@@ -262,7 +263,7 @@ export class PanelView extends ItemView {
 			attach.style.display = target.type === "paragraph" ? "" : "none";
 		};
 		// 附件按钮（仅段落目标）：选图 → 存入 Obsidian 附件位置 → 光标处插入 ![[…]]
-		const attach = foot.createEl("button", { cls: "qj-btn qj-icon-btn" });
+		const attach = foot.createEl("button", { cls: "qj-btn qj-icon-btn qj-composer-attach" });
 		attach.type = "button";
 		attach.setAttribute("aria-label", t("添加附件"));
 		setIcon(attach, "paperclip");
@@ -270,7 +271,7 @@ export class PanelView extends ItemView {
 			const picker = box.ownerDocument.createElement("input");
 			picker.type = "file";
 			picker.accept = "image/*";
-			picker.onchange = () => void this.insertAttachment(picker.files?.[0] ?? null, input);
+			picker.onchange = () => void insertImageAttachment(this.app, picker.files?.[0] ?? null, this.plugin.capture.dailyPath(this.entryDate), input);
 			picker.click();
 		};
 		const send = foot.createEl("button", { cls: "qj-btn qj-btn-primary qj-send-btn" });
@@ -279,23 +280,6 @@ export class PanelView extends ItemView {
 		send.createSpan({ text: t("发送") });
 		send.onclick = () => void this.send();
 		updateHint();
-	}
-
-	/** 附件写入 vault（走 Obsidian 附件路径规则），并把嵌入语法追加到输入框。 */
-	private async insertAttachment(file: File | null, input: HTMLTextAreaElement): Promise<void> {
-		if (file === null) return;
-		try {
-			const buffer = await file.arrayBuffer();
-			const source = this.plugin.capture.dailyPath(new Date());
-			const path = await this.app.fileManager.getAvailablePathForAttachment(file.name, source);
-			await this.app.vault.createBinary(path, buffer);
-			const embed = `![[${path.split("/").pop() ?? path}]]\n`;
-			input.value = input.value.length > 0 ? `${input.value}\n${embed}` : embed;
-			input.dispatchEvent(new Event("input"));
-			new Notice(`${t("已写入")} ${path}`);
-		} catch (error) {
-			new Notice(`${t("写入失败")}: ${error instanceof Error ? error.message : String(error)}`);
-		}
 	}
 
 	/** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
@@ -349,7 +333,7 @@ export class PanelView extends ItemView {
 						if (!result.ok) new Notice(this.entryError(result.message));
 						await this.loadFeed();
 					})();
-				}).open();
+				}, this.plugin.capture.dailyPath(this.entryDate)).open();
 				return;
 			}
 			await this.plugin.performCapture("daily", section, { values: {}, lineValue: value }, true, this.entryDate);
@@ -532,6 +516,10 @@ export class PanelView extends ItemView {
 	}
 
 	private editEntry(section: JournalSection, entry: SectionEntry): void {
+		// 段落条目带插图按钮：附件路径按条目所在日志解析
+		const attachmentSource = entry.kind === "paragraph"
+			? new VaultIndex(this.app, this.plugin.config.journals.daily.dir).dailyFile(entry.date)?.path ?? ""
+			: undefined;
 		new EntryEditModal(
 			this.app,
 			section.heading.replace(/^#+\s*/, ""),
@@ -547,6 +535,7 @@ export class PanelView extends ItemView {
 					}
 				})();
 			},
+			attachmentSource,
 		).open();
 	}
 
