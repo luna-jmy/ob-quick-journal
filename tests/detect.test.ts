@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	compareFromKeys,
 	defaultLabel,
 	detectSections,
 	detectedToSections,
+	splitTrailingEmoji,
 	suggestType,
 } from "../src/parse/detect-sections";
 
@@ -69,5 +71,75 @@ describe("模板识别", () => {
 		expect(ideas.type).toBe("list");
 		expect(ideas.lineTemplate).toBe("- {{value}}");
 		expect(ideas.fields).toEqual([]);
+	});
+
+	it("常规数据区不成对：不同字段各异的后缀 → 仍是 data", () => {
+		const sections = detectedToSections(detectSections(TPL_SNIPPET));
+		const data = sections.find((s) => s.heading === "### 数据记录")!;
+		expect(data.type).toBe("data");
+		expect(data.compare).toBeUndefined();
+	});
+});
+
+const WHEEL_TEMPLATE = [
+	"# 2026 年度日志",
+	"### 🎯 年度评分",
+	"- [PersonalGrowth🎯:: 0]",
+	"- [HealthFitness🎯:: 0]",
+	"- [LoveRelationships🎯:: 0]",
+	"- [CareerWork🎯:: 0]",
+	"- [FunRecreation🎯:: 0]",
+	"- [Social🎯:: 0]",
+	"- [Finance🎯:: 0]",
+	"- [Spiritual🎯:: 0]",
+	"- [PersonalGrowth🏆:: 0]",
+	"- [HealthFitness🏆:: 0]",
+	"- [LoveRelationships🏆:: 0]",
+	"- [CareerWork🏆:: 0]",
+	"- [FunRecreation🏆:: 0]",
+	"- [Social🏆:: 0]",
+	"- [Finance🏆:: 0]",
+	"- [Spiritual🏆:: 0]",
+].join("\n");
+
+describe("对比区识别（键尾系列标记配对）", () => {
+	it("splitTrailingEmoji：尾部 emoji 拆出 base+marker；前缀 emoji / 无 emoji / 全 emoji → null", () => {
+		expect(splitTrailingEmoji("PersonalGrowth🎯")).toEqual({ base: "PersonalGrowth", marker: "🎯" });
+		expect(splitTrailingEmoji("💊medicine")).toBeNull();
+		expect(splitTrailingEmoji("今天最满意的事")).toBeNull();
+		expect(splitTrailingEmoji("🎯")).toBeNull();
+	});
+
+	it("全部基础键恰好配成同两个标记 → compareFromKeys 命中", () => {
+		const keys = [
+			"PersonalGrowth🎯",
+			"HealthFitness🎯",
+			"PersonalGrowth🏆",
+			"HealthFitness🏆",
+		];
+		expect(compareFromKeys(keys)).toEqual({
+			bases: ["PersonalGrowth", "HealthFitness"],
+			markers: ["🎯", "🏆"],
+		});
+		// 某基础键缺一个标记 → 不成对
+		expect(compareFromKeys([...keys.slice(0, 2), "PersonalGrowth🏆"])).toBeNull();
+		// 三个不同标记 → 不成对
+		expect(
+			compareFromKeys(["A🎯", "B🎯", "A🏆", "B🏆", "A⭐", "B⭐"]),
+		).toBeNull();
+		// 无 emoji 后缀 → 不成对
+		expect(compareFromKeys(["A", "B", "C", "D"])).toBeNull();
+	});
+
+	it("生命之轮模板识别为 compare：fields = 8 个基础键，系列 = 🎯/🏆", () => {
+		const sections = detectedToSections(detectSections(WHEEL_TEMPLATE));
+		const wheel = sections.find((s) => s.heading === "### 🎯 年度评分")!;
+		expect(wheel.type).toBe("compare");
+		expect(wheel.fields).toHaveLength(8);
+		expect(wheel.fields[0]).toEqual({ key: "PersonalGrowth", label: "PersonalGrowth" });
+		expect(wheel.compare?.series).toEqual([
+			{ marker: "🎯", label: "🎯" },
+			{ marker: "🏆", label: "🏆" },
+		]);
 	});
 });

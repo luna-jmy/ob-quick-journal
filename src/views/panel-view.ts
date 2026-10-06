@@ -337,7 +337,7 @@ export class PanelView extends ItemView {
 		if (section.type === "paragraph") {
 			// 段落一天一条：已有内容 → 重发即编辑（预填），不再走覆盖确认
 			const day = dateKey(this.entryDate);
-			const existing = await this.plugin.capture.paragraphContent(day, section);
+			const existing = await this.plugin.capture.paragraphContent("daily", day, section);
 			if (existing !== "") {
 				new EntryEditModal(this.app, section.heading.replace(/^#+\s*/, ""), existing, true, (content) => {
 					void (async () => {

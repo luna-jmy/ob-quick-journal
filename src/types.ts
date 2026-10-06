@@ -7,7 +7,7 @@
  * 汇总视图有组件布局（顺序可编辑）与手工查询块；两个视图可配置默认打开位置。
  */
 
-export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph";
+export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph" | "compare";
 export type PeriodType = "daily" | "weekly" | "monthly" | "annual";
 /** 查询组件支持的种类：Tasks 插件没有公开查询 API，只保留 Dataview（官方 api） */
 export type QueryKind = "dataview" | "dataviewjs";
@@ -27,7 +27,7 @@ export interface JournalSection {
 	/** 日志里的标题行原文（含 # 前缀与 emoji），定位锚点 */
 	heading: string;
 	type: SectionType;
-	/** 有内联字段的类型用；list 恒为空；paragraph 恒为空 */
+	/** 有内联字段的类型用；list 恒为空；paragraph 恒为空；compare 存维度基础键（实际键 = 基础键 + 系列标记） */
 	fields: SectionField[];
 	/** list 类型用：追加行模板，默认 `- {{value}}`（GTD 等任务区可设 `- [ ] {{value}}`） */
 	lineTemplate?: string;
@@ -35,6 +35,36 @@ export interface JournalSection {
 	panel?: boolean;
 	/** 面板开启后可用：写入时自动加 HH:mm 时间戳前缀，面板解析显示记录时间（仅 daily） */
 	timestamp?: boolean;
+	/** compare 类型用：两个系列（恒两条），笔记字段键 = 基础键 + marker */
+	compare?: { series: [CompareSeries, CompareSeries] };
+}
+
+export interface CompareSeries {
+	/** 系列标记：拼在基础键尾部的 emoji（如 🎯 / 🏆） */
+	marker: string;
+	/** 系列名（录入列头 / 雷达图例显示用） */
+	label: string;
+}
+
+/** 对比区的默认系列（设置里切类型时种子用，label 可改） */
+export function defaultCompareSeries(): [CompareSeries, CompareSeries] {
+	return [
+		{ marker: "🎯", label: "🎯" },
+		{ marker: "🏆", label: "🏆" },
+	];
+}
+
+/**
+ * 区段在笔记里的全部字段键：compare 展开为 基础键+系列标记（两系列），
+ * 其余类型即字段键本身。写入 / 预填 / 清空 / 汇总读取共用这一口径。
+ */
+export function sectionFieldKeys(section: JournalSection): string[] {
+	if (section.type === "compare" && section.compare) {
+		return section.compare.series.flatMap((s) =>
+			section.fields.map((f) => `${f.key}${s.marker}`),
+		);
+	}
+	return section.fields.map((f) => f.key);
 }
 
 export interface JournalConfig {
@@ -192,6 +222,7 @@ export const DEFAULT_SUMMARY_LAYOUT = [
 	"task-chart",
 	"checkin",
 	"trend",
+	"radar",
 	"calendar",
 	"task-heatmap",
 	"entry-heatmap",
@@ -214,9 +245,25 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null;
 }
 
-const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph"];
+const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph", "compare"];
 const PERIOD_TYPES: PeriodType[] = ["daily", "weekly", "monthly", "annual"];
 const QUERY_KINDS: QueryKind[] = ["dataview", "dataviewjs"];
+
+/** compare 系列清洗：恰好两条、marker 去空白非空、label 空则回退 marker；不合格整个丢弃。 */
+function sanitizeCompare(raw: unknown): { series: [CompareSeries, CompareSeries] } | undefined {
+	const cmp = isRecord(raw) && isRecord(raw.compare) ? raw.compare : undefined;
+	const series = cmp !== undefined && Array.isArray(cmp.series) ? cmp.series : [];
+	if (series.length !== 2) return undefined;
+	const out: CompareSeries[] = [];
+	for (const s of series) {
+		if (!isRecord(s) || typeof s.marker !== "string") return undefined;
+		const marker = s.marker.trim();
+		if (marker === "") return undefined;
+		const label = typeof s.label === "string" && s.label.trim() !== "" ? s.label.trim() : marker;
+		out.push({ marker, label });
+	}
+	return { series: [out[0], out[1]] };
+}
 
 function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | null {
 	if (!isRecord(raw)) return null;
@@ -233,11 +280,13 @@ function sanitizeSection(raw: unknown, fallbackIndex: number): JournalSection | 
 					...(typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}),
 				}))
 		: [];
+	const compare = type === "compare" ? sanitizeCompare(raw) : undefined;
 	return {
 		id,
 		heading,
 		type,
 		fields,
+		...(compare !== undefined ? { compare } : {}),
 		...(typeof raw.lineTemplate === "string" ? { lineTemplate: raw.lineTemplate } : {}),
 		...(raw.panel === true ? { panel: true } : {}),
 		...(raw.timestamp === true ? { timestamp: true } : {}),

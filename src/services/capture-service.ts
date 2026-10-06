@@ -6,6 +6,7 @@
 
 import { TFile, type App } from "obsidian";
 import type { JournalSection, PeriodType, QJConfig } from "../types";
+import { sectionFieldKeys } from "../types";
 import {
 	currentFieldValues,
 	planAppend,
@@ -116,9 +117,10 @@ export class CaptureService {
 				line,
 			});
 		} else {
-			const fillValues = section.fields
-				.filter((f) => payload.values[f.key] !== undefined && payload.values[f.key] !== "")
-				.map((f) => ({ key: f.key, value: payload.values[f.key] }));
+			// compare 区的键是 基础键+系列标记（sectionFieldKeys 展开），planFieldFill 键无关
+			const fillValues = sectionFieldKeys(section)
+				.filter((key) => payload.values[key] !== undefined && payload.values[key] !== "")
+				.map((key) => ({ key, value: payload.values[key] }));
 			if (fillValues.length === 0) {
 				return { ok: false, reason: "error", message: "no values to write" };
 			}
@@ -164,7 +166,7 @@ export class CaptureService {
 			return { ok: false, reason: "error", message: "note not found" };
 		}
 		const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
-		const keys = section.fields.map((f) => f.key);
+		const keys = sectionFieldKeys(section);
 		const current = currentFieldValues(lines, section.heading, keys);
 		const targets = keys.filter((k) => k in current);
 		if (targets.length === 0) {
@@ -295,29 +297,37 @@ export class CaptureService {
 		return { ok: true };
 	}
 
-	/** 段落「重发 = 编辑」：取当天段落现有内容做表单预填（空返回 ""）。 */
-	async paragraphContent(dateStr: string, section: JournalSection): Promise<string> {
-		const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "paragraph", text: "" });
-		const lines = await this.readLines(path);
-		if (lines === null) return "";
+	/** 段落「重发 = 编辑」：取该期间段落现有内容做表单预填（空返回 ""）。 */
+	async paragraphContent(
+		type: PeriodType,
+		dateStr: string,
+		section: JournalSection,
+	): Promise<string> {
+		const file = this.periodNoteFile(type, dateStr);
+		if (file === null) return "";
+		const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
 		// 段落条目的 text 即去掉时间戳后的整段内容
 		const entries = collectEntries(dateStr, lines, [section]);
 		return entries[0]?.text ?? "";
 	}
 
-	/** 某天某标题区各字段当前值（打卡/数据/小结表单预填，改的是当前值而非每次从空开始）。 */
+	/** 某期间某标题区各字段当前值（打卡/数据/对比表单预填，改的是当前值而非每次从空开始）。
+	 * 键口径同写入：compare 区展开为 基础键+系列标记。 */
 	async sectionFieldValues(
+		type: PeriodType,
 		dateStr: string,
 		section: JournalSection,
 	): Promise<Record<string, string>> {
-		const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "field", text: "" });
-		const lines = await this.readLines(path);
-		if (lines === null) return {};
-		return currentFieldValues(
-			lines,
-			section.heading,
-			section.fields.map((f) => f.key),
-		);
+		const file = this.periodNoteFile(type, dateStr);
+		if (file === null) return {};
+		const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
+		return currentFieldValues(lines, section.heading, sectionFieldKeys(section));
+	}
+
+	/** 按期间键在该类型日志目录里递归找笔记（预填用；daily 按归属日，其余按文件名键）。 */
+	private periodNoteFile(type: PeriodType, key: string): TFile | null {
+		const index = new VaultIndex(this.app, this.journal(type).dir);
+		return type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
 	}
 
 	private async mutateEntry(

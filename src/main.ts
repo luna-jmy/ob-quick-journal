@@ -101,7 +101,7 @@ export default class QuickJournalPlugin extends Plugin {
 		if (section.type === "paragraph") {
 			// 段落重发 = 编辑态：预填当天现有内容，提交即整段重写（无需覆盖确认）
 			void this.capture
-				.paragraphContent(this.currentKey(type), section)
+				.paragraphContent(type, this.currentKey(type), section)
 				.then((initial) => {
 					new CaptureModal(
 						this.app,
@@ -115,8 +115,8 @@ export default class QuickJournalPlugin extends Plugin {
 			return;
 		}
 		if (section.fields.length > 0) {
-			// 打卡/数据/小结：预填当天现有值——改的是当前数据，而不是每次从空开始
-			void this.capture.sectionFieldValues(this.currentKey(type), section).then((values) => {
+			// 打卡/数据/小结/对比：预填当前期间现有值——改的是当前数据，而不是每次从空开始
+			void this.capture.sectionFieldValues(type, this.currentKey(type), section).then((values) => {
 				new CaptureModal(
 					this.app,
 					section.heading.replace(/^#+\s*/, ""),
@@ -125,6 +125,7 @@ export default class QuickJournalPlugin extends Plugin {
 					(payload) => void this.performCapture(type, section, payload, false),
 					"",
 					values,
+					section.type === "compare" ? section.compare?.series : undefined,
 				).open();
 			});
 			return;

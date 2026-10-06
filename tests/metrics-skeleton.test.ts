@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { boolStats, numberStats, taskStats } from "../src/metrics/aggregate";
 import type { DayRecord } from "../src/metrics/day-record";
-import { DEFAULT_JOURNALS, BOOL_YES, BOOL_NO, mergeConfig } from "../src/types";
+import { DEFAULT_JOURNALS, BOOL_YES, BOOL_NO, mergeConfig, sectionFieldKeys } from "../src/types";
+import type { JournalSection } from "../src/types";
 import { skeletonFor, noteKeyFor } from "../src/capture/skeleton";
 import { formatTokens } from "../src/periods/period";
 import { parseFieldLines } from "../src/parse/field-lines";
@@ -132,5 +133,35 @@ describe("文件名格式（moment 语法子集）", () => {
 	it("骨架标题跟随自定义格式", () => {
 		const text = skeletonFor("daily", now, [], "日志-YYYYMMDD");
 		expect(text).toContain("# 日志-20260925 日志");
+	});
+});
+
+describe("对比区骨架（系列分组占位行）", () => {
+	const WHEEL: JournalSection = {
+		id: "wheel",
+		heading: "### 生命之轮",
+		type: "compare",
+		fields: [
+			{ key: "PersonalGrowth", label: "成长" },
+			{ key: "HealthFitness", label: "健康" },
+		],
+		compare: {
+			series: [
+				{ marker: "🎯", label: "年初目标" },
+				{ marker: "🏆", label: "年底复盘" },
+			],
+		},
+	};
+
+	it("先系列一全部维度，再系列二；解析出的键与 sectionFieldKeys 一致（round-trip）", () => {
+		const text = skeletonFor("annual", new Date(2026, 0, 1), [WHEEL]);
+		const lines = text.split("\n");
+		// 系列分组：🎯 两行在前、🏆 两行在后
+		expect(lines.indexOf("- [PersonalGrowth🎯::]")).toBeLessThan(lines.indexOf("- [HealthFitness🎯::]"));
+		expect(lines.indexOf("- [HealthFitness🎯::]")).toBeLessThan(lines.indexOf("- [PersonalGrowth🏆::]"));
+		expect(text).toContain("- [HealthFitness🏆::]");
+		// 解析回的键集合 = 展开键（顺序无关，比对集合）
+		const parsed = parseFieldLines(lines).map((p) => p.key);
+		expect(parsed.sort()).toEqual(sectionFieldKeys(WHEEL).sort());
 	});
 });

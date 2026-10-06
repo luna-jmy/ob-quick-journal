@@ -8,6 +8,7 @@
 import { Notice, PluginSettingTab, Setting, TFile, normalizePath, type App } from "obsidian";
 import type QuickJournalPlugin from "./main";
 import type { JournalSection, PeriodType, SectionType, ViewLocation } from "./types";
+import { defaultCompareSeries } from "./types";
 import { detectedToSections, detectSections } from "./parse/detect-sections";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { setLanguage, t } from "./i18n";
@@ -25,6 +26,7 @@ const SECTION_TYPE_LABEL: Record<SectionType, string> = {
 	text: "文本",
 	list: "列表",
 	paragraph: "段落",
+	compare: "对比数据",
 };
 
 type SettingsTabId = "general" | "journals" | "panel";
@@ -277,12 +279,23 @@ export class QJSettingTab extends PluginSettingTab {
 				});
 			})
 			.addDropdown((drop) => {
-				for (const type of ["checkin", "data", "text", "list", "paragraph"] as SectionType[]) {
+				for (const type of [
+					"checkin",
+					"data",
+					"text",
+					"list",
+					"paragraph",
+					"compare",
+				] as SectionType[]) {
 					drop.addOption(type, t(SECTION_TYPE_LABEL[type]));
 				}
 				drop.setValue(section.type);
 				drop.onChange(async (value) => {
 					section.type = value as SectionType;
+					// 切到对比区时种子默认系列（🎯/🏆），字段键解读随之生效
+					if (section.type === "compare" && section.compare === undefined) {
+						section.compare = { series: defaultCompareSeries() };
+					}
 					await this.plugin.saveConfig();
 					this.display();
 				});
@@ -337,6 +350,33 @@ export class QJSettingTab extends PluginSettingTab {
 					});
 				});
 			return;
+		}
+
+		// 对比区：两个系列（emoji 标记 + 系列名），笔记键 = 基础键 + 标记
+		if (section.type === "compare") {
+			if (section.compare === undefined) section.compare = { series: defaultCompareSeries() };
+			const series = section.compare.series;
+			for (const [i, s] of series.entries()) {
+				new Setting(container)
+					.setName(t(i === 0 ? "系列一" : "系列二"))
+					.setDesc(t("拼在字段键尾部的 emoji（笔记键 = 基础键 + 标记），两个系列用不同 emoji"))
+					.addText((text) => {
+						text.setPlaceholder(t("系列标记"));
+						text.setValue(s.marker);
+						text.onChange(async (value) => {
+							s.marker = value.trim();
+							await this.plugin.saveConfig();
+						});
+					})
+					.addText((text) => {
+						text.setPlaceholder(t("系列名称"));
+						text.setValue(s.label);
+						text.onChange(async (value) => {
+							s.label = value.trim();
+							await this.plugin.saveConfig();
+						});
+					});
+			}
 		}
 
 		// 段落类型没有字段行，不提供字段编辑器

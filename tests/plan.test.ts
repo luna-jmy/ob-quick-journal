@@ -220,4 +220,30 @@ describe("currentFieldValues（表单预填）", () => {
 		]);
 		expect(values).toEqual({ "weight⚖️": "62", "reading🕓": "" });
 	});
+
+	it("对比区的后缀键（基础键+系列标记）照常预填 / 填写（round-trip）", () => {
+		const note = ["# 2026 年度日志", "### 生命之轮", "- [Growth🎯:: 7]", "- [Growth🏆::]"].join(
+			"\n",
+		);
+		const keys = ["Growth🎯", "Growth🏆", "Health🎯", "Health🏆"];
+		// 预填：已有值带出，缺行不补
+		expect(currentFieldValues(note.split("\n"), "### 生命之轮", keys)).toEqual({
+			"Growth🎯": "7",
+			"Growth🏆": "",
+		});
+		// 写入：空值行填值、缺行补建（planFieldFill 键无关）
+		const plan = planFieldFill(note.split("\n"), {
+			heading: "### 生命之轮",
+			headingMissingCreates: true,
+			values: [
+				{ key: "Growth🏆", value: "8" },
+				{ key: "Health🎯", value: "6" },
+			],
+		});
+		expect(plan.status).toBe("ok");
+		if (plan.status !== "ok") return;
+		const out = applyPlan(note, plan);
+		expect(out).toContain("- [Growth🏆:: 8]");
+		expect(out).toContain("- [Health🎯:: 6]");
+	});
 });

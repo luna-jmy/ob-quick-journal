@@ -16,6 +16,7 @@ import {
 	renderHeatmap,
 	renderQuickCapture,
 	renderQueryPanel,
+	renderRadar,
 	renderTaskChart,
 	renderTrend,
 	type SummaryCtx,
@@ -167,6 +168,11 @@ export class SummaryView extends ItemView {
 				id: "trend",
 				title: t("数据趋势"),
 				render: (card, ctx) => renderTrend(card, ctx),
+			},
+			{
+				id: "radar",
+				title: t("对比雷达图"),
+				render: (card, ctx) => void renderRadar(card, this.app, ctx),
 			},
 			{
 				id: "calendar",

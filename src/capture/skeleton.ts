@@ -98,7 +98,16 @@ export function skeletonFor(
 	const lines = [...frontmatter, "", title, ""];
 	for (const section of sections) {
 		lines.push(section.heading, "");
-		for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
+		if (section.type === "compare" && section.compare) {
+			// 对比区按系列分组：先系列一全部维度，再系列二（键 = 基础键 + 系列标记）
+			for (const s of section.compare.series) {
+				for (const field of section.fields) {
+					lines.push(renderFieldLine(`${field.key}${s.marker}`, ""));
+				}
+			}
+		} else {
+			for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
+		}
 		lines.push("");
 	}
 	return lines.join("\n");

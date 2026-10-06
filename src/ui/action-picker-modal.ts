@@ -12,6 +12,7 @@ const TYPE_ICON: Record<SectionType, string> = {
 	text: "feather",
 	list: "list-plus",
 	paragraph: "align-left",
+	compare: "target",
 };
 
 export class ActionPickerModal extends Modal {

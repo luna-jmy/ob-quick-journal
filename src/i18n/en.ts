@@ -182,6 +182,17 @@ export const EN: Record<string, string> = {
 	"文本": "Text",
 	"列表": "List",
 	"段落": "Paragraph",
+	"对比数据": "Compare",
+	"维度": "Dimension",
+	"系列一": "Series 1",
+	"系列二": "Series 2",
+	"系列标记": "Series marker",
+	"系列名称": "Series label",
+	"拼在字段键尾部的 emoji（笔记键 = 基础键 + 标记），两个系列用不同 emoji":
+		"Emoji appended to the field keys (note key = base key + marker); use a different emoji per series",
+	"对比雷达图": "Comparison radar",
+	"暂无对比数据": "No comparison data yet",
+	"未找到期间笔记": "Period note not found",
 	"自动添加时间戳": "Auto timestamp",
 	"记录时自动加时间戳前缀（HH:mm），速记面板会解析并显示":
 		"Prefix entries with HH:mm on capture; the capture feed parses and shows it",

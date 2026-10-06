@@ -1,13 +1,14 @@
 /**
  * 捕获表单弹窗：按标题区类型渲染。
  * checkin → 每字段一组 ✔️/❌ 单选开关（不选 = 不动该行）；data → 数字输入；
- * text → 文本输入；list / paragraph → 单条内容输入。
+ * text → 文本输入；list / paragraph → 单条内容输入；
+ * compare → 维度 × 两系列的两列数字输入（键 = 基础键 + 系列标记）。
  * 预填语义（用户口径 2026-09-30）：表单显示当前值，但只提交用户改过的字段——
  * 未动的不重写（也不触发覆盖确认）；「清空当前内容」显式把所有字段写回空值行。
  */
 
 import { Modal, setIcon } from "obsidian";
-import type { SectionField, SectionType } from "../types";
+import type { CompareSeries, SectionField, SectionType } from "../types";
 import { BOOL_NO, BOOL_YES } from "../types";
 import { t } from "../i18n";
 
@@ -30,6 +31,8 @@ export class CaptureModal extends Modal {
 		private initial = "",
 		/** 字段当前值（仅展示预填；不进提交，改了才提交） */
 		private initialValues: Record<string, string> = {},
+		/** compare 区的两个系列（键 = 基础键 + marker） */
+		private compareSeries?: [CompareSeries, CompareSeries],
 	) {
 		super(app);
 	}
@@ -45,6 +48,24 @@ export class CaptureModal extends Modal {
 			input.rows = this.type === "paragraph" ? 6 : 2;
 			if (this.initial !== "") input.value = this.initial;
 			input.onchange = () => (this.lineValue = input.value);
+		} else if (this.type === "compare" && this.compareSeries) {
+			// 对比区：表头 [维度 | 系列1 | 系列2]，行 = 维度 × 两列数字输入，键 = 基础键+marker
+			const [s1, s2] = this.compareSeries;
+			const grid = form.createDiv({ cls: "qj-compare-grid" });
+			grid.createDiv({ cls: "qj-compare-head", text: t("维度") });
+			grid.createDiv({ cls: "qj-compare-head", text: s1.label });
+			grid.createDiv({ cls: "qj-compare-head", text: s2.label });
+			for (const field of this.fields) {
+				grid.createDiv({ cls: "qj-compare-label", text: field.label });
+				for (const s of this.compareSeries) {
+					const key = `${field.key}${s.marker}`;
+					const input = grid.createEl("input", { cls: "qj-input", type: "number" });
+					input.inputMode = "decimal";
+					const current = this.initialValues[key] ?? "";
+					if (current !== "") input.value = current;
+					input.onchange = () => (this.values[key] = input.value);
+				}
+			}
 		} else {
 			for (const field of this.fields) {
 				const current = this.initialValues[field.key] ?? "";

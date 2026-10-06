@@ -4,14 +4,17 @@
  * 图表原生 SVG/CSS 自绘，只用 Obsidian CSS 变量（SPEC §6.1：不依赖 Charts）。
  */
 
-import { TFile, type App, type Component } from "obsidian";
+import { type App, type Component } from "obsidian";
 import type QuickJournalPlugin from "../main";
 import type { PeriodType, QueryKind } from "../types";
 import type { SectionEntry } from "../parse/section-entries";
 import { taskSymbol } from "../parse/line-ops";
+import { parseFieldLines } from "../parse/field-lines";
+import { noteKeyFor } from "../capture/skeleton";
 import { QueryBridge } from "../services/dataview-bridge";
 import { VaultIndex } from "../services/vault-index";
 import { boolStats, doneByDay } from "../metrics/aggregate";
+import { compareVectors, radarGeometry, radarRenderable } from "../metrics/radar";
 import type { DayRecord } from "../metrics/day-record";
 import { monthGrid } from "../periods/month-grid";
 import type { PeriodKind } from "../periods/period";
@@ -293,6 +296,124 @@ function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, strin
 	const el = host.ownerDocument.createElementNS("http://www.w3.org/2000/svg", tag);
 	for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
 	return el;
+}
+
+/** 汇总期间类型 → 对比区所在的日志类型（季度视图没有自己的日志，读年度）。 */
+const RADAR_KIND_TO_TYPE: Partial<Record<PeriodKind, PeriodType>> = {
+	week: "weekly",
+	month: "monthly",
+	quarter: "annual",
+	year: "annual",
+};
+
+/**
+ * 对比雷达图组件：当前期间类型对应日志里的对比区段，两个系列画在同一张雷达上。
+ * 笔记缺失给一键建骨架（骨架含两系列占位行）；只有一个系列有值时画单多边形。
+ */
+export async function renderRadar(card: HTMLElement, app: App, ctx: SummaryCtx): Promise<void> {
+	const type = RADAR_KIND_TO_TYPE[ctx.kind];
+	const journal = type !== undefined ? ctx.plugin.config.journals[type] : null;
+	const sections =
+		journal !== null
+			? journal.sections.filter((s) => s.type === "compare" && s.compare !== undefined)
+			: [];
+	if (sections.length === 0) {
+		card.createDiv({ cls: "qj-muted", text: "—" });
+		return;
+	}
+
+	// 带时间部分的字符串按本地时区解析（裸 YYYY-MM-DD 走 UTC）
+	const start = new Date(`${ctx.days[0]}T00:00:00`);
+	const key = noteKeyFor(type!, start, journal!.filenameFormat);
+	const file = new VaultIndex(app, journal!.dir).fileByKey(key);
+	if (file === null) {
+		const row = card.createDiv({ cls: "qj-radar-empty" });
+		row.createSpan({ cls: "qj-muted", text: `${t("未找到期间笔记")} ${key}` });
+		const btn = row.createEl("button", { cls: "qj-btn", text: t("创建笔记") });
+		btn.type = "button";
+		btn.onclick = () => void ctx.plugin.openPeriodNote(type!, key);
+		return;
+	}
+
+	const noteText = await app.vault.cachedRead(file);
+	const fieldValues: Record<string, string> = {};
+	for (const fl of parseFieldLines(noteText.split(/\r?\n/))) {
+		if (!(fl.key in fieldValues)) fieldValues[fl.key] = fl.value;
+	}
+
+	for (const section of sections) {
+		const block = card.createDiv({ cls: "qj-radar-block" });
+		block.createDiv({
+			cls: "qj-checkin-heading",
+			text: section.heading.replace(/^#+\s*/, ""),
+		});
+		const vectors = compareVectors(section, fieldValues);
+		const dims = section.fields.map((f) => f.label);
+		if (!radarRenderable(vectors, dims)) {
+			block.createDiv({ cls: "qj-muted", text: t("暂无对比数据") });
+			continue;
+		}
+		const geo = radarGeometry(dims, vectors);
+
+		const legend = block.createDiv({ cls: "qj-radar-legend" });
+		for (const [i, v] of vectors.entries()) {
+			const chip = legend.createSpan({ cls: `qj-radar-chip qj-radar-chip--${i === 0 ? "a" : "b"}` });
+			chip.createSpan({ cls: "qj-radar-swatch" });
+			chip.createSpan({ text: v.label });
+		}
+
+		const svg = block.createSvg("svg", {
+			attr: { viewBox: `0 0 ${geo.size} ${geo.size}` },
+			cls: "qj-radar-svg",
+		});
+		for (const ring of geo.rings) {
+			svg.appendChild(createSvgEl(block, "polygon", { points: ring, "class": "qj-radar-ring" }));
+		}
+		for (const s of geo.spokes) {
+			svg.appendChild(
+				createSvgEl(block, "line", {
+					x1: s.x1.toFixed(1),
+					y1: s.y1.toFixed(1),
+					x2: s.x2.toFixed(1),
+					y2: s.y2.toFixed(1),
+					"class": "qj-radar-spoke",
+				}),
+			);
+		}
+		for (const l of geo.labels) {
+			const label = createSvgEl(block, "text", {
+				x: l.x,
+				y: l.y,
+				"text-anchor": l.anchor,
+				"class": "qj-radar-label",
+			});
+			label.textContent = l.text;
+			svg.appendChild(label);
+		}
+		for (const [i, s] of geo.series.entries()) {
+			const cls = i === 0 ? "a" : "b";
+			if (s.points.length >= 3) {
+				svg.appendChild(
+					createSvgEl(block, "polygon", {
+						points: s.points.map((p) => `${p.x},${p.y}`).join(" "),
+						"class": `qj-radar-poly qj-radar-poly--${cls}`,
+					}),
+				);
+			}
+			for (const p of s.points) {
+				const dot = createSvgEl(block, "circle", {
+					cx: String(p.x),
+					cy: String(p.y),
+					r: "3",
+					"class": `qj-radar-dot qj-radar-dot--${cls}`,
+				});
+				const tip = createSvgEl(block, "title", {});
+				tip.textContent = `${p.dim} · ${s.label}: ${p.v}`;
+				dot.appendChild(tip);
+				svg.appendChild(dot);
+			}
+		}
+	}
 }
 
 /** 月历组件：年/月片可点开对应复盘笔记；周号列点开周日志；格子点开当日日志。
