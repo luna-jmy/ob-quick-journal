@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-09-30T14:42:41.355Z */
+/* Quick Journal — bundled 2026-10-06T05:58:17.464Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -27,6 +27,20 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian11 = require("obsidian");
 
 // src/types.ts
+function defaultCompareSeries() {
+  return [
+    { marker: "\u{1F3AF}", label: "\u{1F3AF}" },
+    { marker: "\u{1F3C6}", label: "\u{1F3C6}" }
+  ];
+}
+function sectionFieldKeys(section) {
+  if (section.type === "compare" && section.compare) {
+    return section.compare.series.flatMap(
+      (s) => section.fields.map((f) => `${f.key}${s.marker}`)
+    );
+  }
+  return section.fields.map((f) => f.key);
+}
 var BOOL_YES = "\u2714\uFE0F";
 var BOOL_NO = "\u274C";
 var DEFAULT_DAILY_SECTIONS = [
@@ -137,6 +151,7 @@ var DEFAULT_SUMMARY_LAYOUT = [
   "task-chart",
   "checkin",
   "trend",
+  "radar",
   "calendar",
   "task-heatmap",
   "entry-heatmap",
@@ -156,9 +171,23 @@ var DEFAULT_CONFIG = {
 function isRecord(v) {
   return typeof v === "object" && v !== null;
 }
-var SECTION_TYPES = ["checkin", "data", "text", "list", "paragraph"];
+var SECTION_TYPES = ["checkin", "data", "text", "list", "paragraph", "compare"];
 var PERIOD_TYPES = ["daily", "weekly", "monthly", "annual"];
 var QUERY_KINDS = ["dataview", "dataviewjs"];
+function sanitizeCompare(raw) {
+  const cmp = isRecord(raw) && isRecord(raw.compare) ? raw.compare : void 0;
+  const series = cmp !== void 0 && Array.isArray(cmp.series) ? cmp.series : [];
+  if (series.length !== 2) return void 0;
+  const out = [];
+  for (const s of series) {
+    if (!isRecord(s) || typeof s.marker !== "string") return void 0;
+    const marker = s.marker.trim();
+    if (marker === "") return void 0;
+    const label = typeof s.label === "string" && s.label.trim() !== "" ? s.label.trim() : marker;
+    out.push({ marker, label });
+  }
+  return { series: [out[0], out[1]] };
+}
 function sanitizeSection(raw, fallbackIndex) {
   if (!isRecord(raw)) return null;
   const id = typeof raw.id === "string" && raw.id !== "" ? raw.id : `sec-${fallbackIndex}`;
@@ -170,11 +199,13 @@ function sanitizeSection(raw, fallbackIndex) {
     label: typeof f.label === "string" && f.label !== "" ? f.label : String(f.key),
     ...typeof f.unit === "string" && f.unit !== "" ? { unit: f.unit } : {}
   })) : [];
+  const compare = type === "compare" ? sanitizeCompare(raw) : void 0;
   return {
     id,
     heading,
     type,
     fields,
+    ...compare !== void 0 ? { compare } : {},
     ...typeof raw.lineTemplate === "string" ? { lineTemplate: raw.lineTemplate } : {},
     ...raw.panel === true ? { panel: true } : {},
     ...raw.timestamp === true ? { timestamp: true } : {}
@@ -459,6 +490,16 @@ var EN = {
   "\u6587\u672C": "Text",
   "\u5217\u8868": "List",
   "\u6BB5\u843D": "Paragraph",
+  "\u5BF9\u6BD4\u6570\u636E": "Compare",
+  "\u7EF4\u5EA6": "Dimension",
+  "\u7CFB\u5217\u4E00": "Series 1",
+  "\u7CFB\u5217\u4E8C": "Series 2",
+  "\u7CFB\u5217\u6807\u8BB0": "Series marker",
+  "\u7CFB\u5217\u540D\u79F0": "Series label",
+  "\u62FC\u5728\u5B57\u6BB5\u952E\u5C3E\u90E8\u7684 emoji\uFF08\u7B14\u8BB0\u952E = \u57FA\u7840\u952E + \u6807\u8BB0\uFF09\uFF0C\u4E24\u4E2A\u7CFB\u5217\u7528\u4E0D\u540C emoji": "Emoji appended to the field keys (note key = base key + marker); use a different emoji per series",
+  "\u5BF9\u6BD4\u96F7\u8FBE\u56FE": "Comparison radar",
+  "\u6682\u65E0\u5BF9\u6BD4\u6570\u636E": "No comparison data yet",
+  "\u672A\u627E\u5230\u671F\u95F4\u7B14\u8BB0": "Period note not found",
   "\u81EA\u52A8\u6DFB\u52A0\u65F6\u95F4\u6233": "Auto timestamp",
   "\u8BB0\u5F55\u65F6\u81EA\u52A8\u52A0\u65F6\u95F4\u6233\u524D\u7F00\uFF08HH:mm\uFF09\uFF0C\u901F\u8BB0\u9762\u677F\u4F1A\u89E3\u6790\u5E76\u663E\u793A": "Prefix entries with HH:mm on capture; the capture feed parses and shows it",
   "\u547D\u4EE4\u5728\u91CD\u8F7D\u63D2\u4EF6\u540E\u6309\u65B0\u914D\u7F6E\u751F\u6548\uFF1B\u5DE5\u5177\u680F\u6309\u94AE\u4E0E\u6C47\u603B\u89C6\u56FE\u5373\u65F6\u751F\u6548\u3002": "Commands follow the new configuration after reloading the plugin; the toolbar button and the summary view apply immediately."
@@ -978,7 +1019,15 @@ function skeletonFor(type, now, sections, filenameFormat) {
   const lines = [...frontmatter, "", title, ""];
   for (const section of sections) {
     lines.push(section.heading, "");
-    for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
+    if (section.type === "compare" && section.compare) {
+      for (const s of section.compare.series) {
+        for (const field of section.fields) {
+          lines.push(renderFieldLine(`${field.key}${s.marker}`, ""));
+        }
+      }
+    } else {
+      for (const field of section.fields) lines.push(renderFieldLine(field.key, ""));
+    }
     lines.push("");
   }
   return lines.join("\n");
@@ -1414,7 +1463,7 @@ var CaptureService = class {
         line
       });
     } else {
-      const fillValues = section.fields.filter((f) => payload.values[f.key] !== void 0 && payload.values[f.key] !== "").map((f) => ({ key: f.key, value: payload.values[f.key] }));
+      const fillValues = sectionFieldKeys(section).filter((key2) => payload.values[key2] !== void 0 && payload.values[key2] !== "").map((key2) => ({ key: key2, value: payload.values[key2] }));
       if (fillValues.length === 0) {
         return { ok: false, reason: "error", message: "no values to write" };
       }
@@ -1455,7 +1504,7 @@ var CaptureService = class {
       return { ok: false, reason: "error", message: "note not found" };
     }
     const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
-    const keys = section.fields.map((f) => f.key);
+    const keys = sectionFieldKeys(section);
     const current = currentFieldValues(lines, section.heading, keys);
     const targets = keys.filter((k) => k in current);
     if (targets.length === 0) {
@@ -1560,25 +1609,27 @@ var CaptureService = class {
     await applyPlanToFile(this.app, path, planEditLineAt(entry.lineIndex, newLine));
     return { ok: true };
   }
-  /** 段落「重发 = 编辑」：取当天段落现有内容做表单预填（空返回 ""）。 */
-  async paragraphContent(dateStr, section) {
+  /** 段落「重发 = 编辑」：取该期间段落现有内容做表单预填（空返回 ""）。 */
+  async paragraphContent(type, dateStr, section) {
     var _a, _b;
-    const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "paragraph", text: "" });
-    const lines = await this.readLines(path);
-    if (lines === null) return "";
+    const file = this.periodNoteFile(type, dateStr);
+    if (file === null) return "";
+    const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
     const entries = collectEntries(dateStr, lines, [section]);
     return (_b = (_a = entries[0]) == null ? void 0 : _a.text) != null ? _b : "";
   }
-  /** 某天某标题区各字段当前值（打卡/数据/小结表单预填，改的是当前值而非每次从空开始）。 */
-  async sectionFieldValues(dateStr, section) {
-    const path = this.entryPath({ date: dateStr, sectionId: section.id, kind: "field", text: "" });
-    const lines = await this.readLines(path);
-    if (lines === null) return {};
-    return currentFieldValues(
-      lines,
-      section.heading,
-      section.fields.map((f) => f.key)
-    );
+  /** 某期间某标题区各字段当前值（打卡/数据/对比表单预填，改的是当前值而非每次从空开始）。
+   * 键口径同写入：compare 区展开为 基础键+系列标记。 */
+  async sectionFieldValues(type, dateStr, section) {
+    const file = this.periodNoteFile(type, dateStr);
+    if (file === null) return {};
+    const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
+    return currentFieldValues(lines, section.heading, sectionFieldKeys(section));
+  }
+  /** 按期间键在该类型日志目录里递归找笔记（预填用；daily 按归属日，其余按文件名键）。 */
+  periodNoteFile(type, key) {
+    const index = new VaultIndex(this.app, this.journal(type).dir);
+    return type === "daily" ? index.dailyFile(key) : index.fileByKey(key);
   }
   async mutateEntry(section, entry, content) {
     var _a, _b, _c, _d;
@@ -1622,7 +1673,7 @@ var CaptureService = class {
 // src/ui/capture-modal.ts
 var import_obsidian2 = require("obsidian");
 var CaptureModal = class extends import_obsidian2.Modal {
-  constructor(app, title, type, fields, onSubmit, initial = "", initialValues = {}) {
+  constructor(app, title, type, fields, onSubmit, initial = "", initialValues = {}, compareSeries) {
     super(app);
     this.title = title;
     this.type = type;
@@ -1630,12 +1681,13 @@ var CaptureModal = class extends import_obsidian2.Modal {
     this.onSubmit = onSubmit;
     this.initial = initial;
     this.initialValues = initialValues;
+    this.compareSeries = compareSeries;
     this.values = {};
     this.lineValue = "";
     this.boolState = {};
   }
   onOpen() {
-    var _a;
+    var _a, _b;
     this.titleEl.setText(this.title);
     const form = this.contentEl.createDiv({ cls: "qj-form" });
     if (this.type === "list" || this.type === "paragraph") {
@@ -1645,9 +1697,26 @@ var CaptureModal = class extends import_obsidian2.Modal {
       input.rows = this.type === "paragraph" ? 6 : 2;
       if (this.initial !== "") input.value = this.initial;
       input.onchange = () => this.lineValue = input.value;
+    } else if (this.type === "compare" && this.compareSeries) {
+      const [s1, s2] = this.compareSeries;
+      const grid = form.createDiv({ cls: "qj-compare-grid" });
+      grid.createDiv({ cls: "qj-compare-head", text: t("\u7EF4\u5EA6") });
+      grid.createDiv({ cls: "qj-compare-head", text: s1.label });
+      grid.createDiv({ cls: "qj-compare-head", text: s2.label });
+      for (const field of this.fields) {
+        grid.createDiv({ cls: "qj-compare-label", text: field.label });
+        for (const s of this.compareSeries) {
+          const key = `${field.key}${s.marker}`;
+          const input = grid.createEl("input", { cls: "qj-input", type: "number" });
+          input.inputMode = "decimal";
+          const current = (_a = this.initialValues[key]) != null ? _a : "";
+          if (current !== "") input.value = current;
+          input.onchange = () => this.values[key] = input.value;
+        }
+      }
     } else {
       for (const field of this.fields) {
-        const current = (_a = this.initialValues[field.key]) != null ? _a : "";
+        const current = (_b = this.initialValues[field.key]) != null ? _b : "";
         const row = form.createDiv({ cls: "qj-field" });
         row.createEl("label", { cls: "qj-field-label", text: field.label });
         if (this.type === "checkin") {
@@ -1658,9 +1727,9 @@ var CaptureModal = class extends import_obsidian2.Modal {
             no: void 0
           };
           const sync = () => {
-            var _a2, _b;
+            var _a2, _b2;
             (_a2 = buttons.yes) == null ? void 0 : _a2.toggleClass("is-active", this.boolState[field.key] === "yes");
-            (_b = buttons.no) == null ? void 0 : _b.toggleClass("is-active", this.boolState[field.key] === "no");
+            (_b2 = buttons.no) == null ? void 0 : _b2.toggleClass("is-active", this.boolState[field.key] === "no");
           };
           for (const opt of [
             { id: "yes", label: BOOL_YES },
@@ -1761,7 +1830,8 @@ var TYPE_ICON = {
   data: "line-chart",
   text: "feather",
   list: "list-plus",
-  paragraph: "align-left"
+  paragraph: "align-left",
+  compare: "target"
 };
 var ActionPickerModal = class extends import_obsidian4.Modal {
   constructor(app, sections, onPick) {
@@ -1882,6 +1952,77 @@ var QueryBridge = class {
     }
   }
 };
+
+// src/metrics/radar.ts
+function compareVectors(section, fieldValues) {
+  var _a;
+  const series = (_a = section.compare) == null ? void 0 : _a.series;
+  if (!series) return [];
+  return series.map((s) => ({
+    marker: s.marker,
+    label: s.label,
+    values: section.fields.map((f) => {
+      const raw = fieldValues[`${f.key}${s.marker}`];
+      if (raw === void 0 || raw.trim() === "") return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    })
+  }));
+}
+var LABEL_MAX = 10;
+function truncate(text) {
+  return text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX)}\u2026` : text;
+}
+function radarGeometry(dims, vectors, size = 220) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size * 0.355;
+  const labelRadius = size * 0.435;
+  const n = dims.length;
+  const angleOf = (i) => -Math.PI / 2 + 2 * Math.PI * i / n;
+  const pointAt = (i, r) => ({
+    x: cx + r * Math.cos(angleOf(i)),
+    y: cy + r * Math.sin(angleOf(i))
+  });
+  const flat = vectors.flatMap((v) => v.values.filter((x) => x !== null));
+  const scaleMax = Math.max(10, ...flat);
+  const ringPolygon = (ratio) => Array.from({ length: n }, (_, i) => {
+    const p = pointAt(i, radius * ratio);
+    return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  }).join(" ");
+  const spokes = Array.from({ length: n }, (_, i) => {
+    const p = pointAt(i, radius);
+    return { x1: cx, y1: cy, x2: p.x, y2: p.y };
+  });
+  const labels = dims.map((dim, i) => {
+    const a = angleOf(i);
+    const x = cx + labelRadius * Math.cos(a);
+    const y = cy + labelRadius * Math.sin(a);
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const anchor = Math.abs(cos) < 0.35 ? "middle" : cos > 0 ? "start" : "end";
+    return {
+      text: truncate(dim),
+      x: x.toFixed(1),
+      y: (y + (sin > 0.5 ? 4 : sin < -0.5 ? -2 : 1)).toFixed(1),
+      anchor
+    };
+  });
+  const series = vectors.map((v) => ({
+    marker: v.marker,
+    label: v.label,
+    points: v.values.map((value, i) => ({ value, i })).filter((x) => x.value !== null).map(({ value, i }) => {
+      var _a;
+      const p = pointAt(i, radius * value / scaleMax);
+      return { x: Number(p.x.toFixed(1)), y: Number(p.y.toFixed(1)), v: value, dim: (_a = dims[i]) != null ? _a : "" };
+    })
+  }));
+  return { size, scaleMax, dims, rings: [ringPolygon(0.5), ringPolygon(1)], spokes, labels, series };
+}
+function radarRenderable(vectors, dims) {
+  if (dims.length < 3) return false;
+  return vectors.some((v) => v.values.some((x) => x !== null));
+}
 
 // src/periods/month-grid.ts
 function dateKey2(d) {
@@ -2120,6 +2261,108 @@ function createSvgEl(host, tag, attrs) {
   const el = host.ownerDocument.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   return el;
+}
+var RADAR_KIND_TO_TYPE = {
+  week: "weekly",
+  month: "monthly",
+  quarter: "annual",
+  year: "annual"
+};
+async function renderRadar(card, app, ctx) {
+  const type = RADAR_KIND_TO_TYPE[ctx.kind];
+  const journal = type !== void 0 ? ctx.plugin.config.journals[type] : null;
+  const sections = journal !== null ? journal.sections.filter((s) => s.type === "compare" && s.compare !== void 0) : [];
+  if (sections.length === 0) {
+    card.createDiv({ cls: "qj-muted", text: "\u2014" });
+    return;
+  }
+  const start = /* @__PURE__ */ new Date(`${ctx.days[0]}T00:00:00`);
+  const key = noteKeyFor(type, start, journal.filenameFormat);
+  const file = new VaultIndex(app, journal.dir).fileByKey(key);
+  if (file === null) {
+    const row = card.createDiv({ cls: "qj-radar-empty" });
+    row.createSpan({ cls: "qj-muted", text: `${t("\u672A\u627E\u5230\u671F\u95F4\u7B14\u8BB0")} ${key}` });
+    const btn = row.createEl("button", { cls: "qj-btn", text: t("\u521B\u5EFA\u7B14\u8BB0") });
+    btn.type = "button";
+    btn.onclick = () => void ctx.plugin.openPeriodNote(type, key);
+    return;
+  }
+  const noteText = await app.vault.cachedRead(file);
+  const fieldValues = {};
+  for (const fl of parseFieldLines(noteText.split(/\r?\n/))) {
+    if (!(fl.key in fieldValues)) fieldValues[fl.key] = fl.value;
+  }
+  for (const section of sections) {
+    const block = card.createDiv({ cls: "qj-radar-block" });
+    block.createDiv({
+      cls: "qj-checkin-heading",
+      text: section.heading.replace(/^#+\s*/, "")
+    });
+    const vectors = compareVectors(section, fieldValues);
+    const dims = section.fields.map((f) => f.label);
+    if (!radarRenderable(vectors, dims)) {
+      block.createDiv({ cls: "qj-muted", text: t("\u6682\u65E0\u5BF9\u6BD4\u6570\u636E") });
+      continue;
+    }
+    const geo = radarGeometry(dims, vectors);
+    const legend = block.createDiv({ cls: "qj-radar-legend" });
+    for (const [i, v] of vectors.entries()) {
+      const chip = legend.createSpan({ cls: `qj-radar-chip qj-radar-chip--${i === 0 ? "a" : "b"}` });
+      chip.createSpan({ cls: "qj-radar-swatch" });
+      chip.createSpan({ text: v.label });
+    }
+    const svg = block.createSvg("svg", {
+      attr: { viewBox: `0 0 ${geo.size} ${geo.size}` },
+      cls: "qj-radar-svg"
+    });
+    for (const ring of geo.rings) {
+      svg.appendChild(createSvgEl(block, "polygon", { points: ring, "class": "qj-radar-ring" }));
+    }
+    for (const s of geo.spokes) {
+      svg.appendChild(
+        createSvgEl(block, "line", {
+          x1: s.x1.toFixed(1),
+          y1: s.y1.toFixed(1),
+          x2: s.x2.toFixed(1),
+          y2: s.y2.toFixed(1),
+          "class": "qj-radar-spoke"
+        })
+      );
+    }
+    for (const l of geo.labels) {
+      const label = createSvgEl(block, "text", {
+        x: l.x,
+        y: l.y,
+        "text-anchor": l.anchor,
+        "class": "qj-radar-label"
+      });
+      label.textContent = l.text;
+      svg.appendChild(label);
+    }
+    for (const [i, s] of geo.series.entries()) {
+      const cls = i === 0 ? "a" : "b";
+      if (s.points.length >= 3) {
+        svg.appendChild(
+          createSvgEl(block, "polygon", {
+            points: s.points.map((p) => `${p.x},${p.y}`).join(" "),
+            "class": `qj-radar-poly qj-radar-poly--${cls}`
+          })
+        );
+      }
+      for (const p of s.points) {
+        const dot = createSvgEl(block, "circle", {
+          cx: String(p.x),
+          cy: String(p.y),
+          r: "3",
+          "class": `qj-radar-dot qj-radar-dot--${cls}`
+        });
+        const tip = createSvgEl(block, "title", {});
+        tip.textContent = `${p.dim} \xB7 ${s.label}: ${p.v}`;
+        dot.appendChild(tip);
+        svg.appendChild(dot);
+      }
+    }
+  }
 }
 function renderCalendar(card, app, ctx) {
   var _a;
@@ -2429,6 +2672,11 @@ var SummaryView = class extends import_obsidian6.ItemView {
         id: "trend",
         title: t("\u6570\u636E\u8D8B\u52BF"),
         render: (card, ctx) => renderTrend(card, ctx)
+      },
+      {
+        id: "radar",
+        title: t("\u5BF9\u6BD4\u96F7\u8FBE\u56FE"),
+        render: (card, ctx) => void renderRadar(card, this.app, ctx)
       },
       {
         id: "calendar",
@@ -3032,7 +3280,7 @@ ${embed}` : embed;
     if (this.inputEl) this.inputEl.value = "";
     if (section.type === "paragraph") {
       const day = dateKey(this.entryDate);
-      const existing = await this.plugin.capture.paragraphContent(day, section);
+      const existing = await this.plugin.capture.paragraphContent("daily", day, section);
       if (existing !== "") {
         new EntryEditModal(this.app, section.heading.replace(/^#+\s*/, ""), existing, true, (content) => {
           void (async () => {
@@ -3301,12 +3549,59 @@ function suggestType(heading, fieldCount) {
   return "text";
 }
 var EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu;
+var EMOJI_CHAR_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
 function defaultLabel(key) {
   const cleaned = key.replace(EMOJI_RE, "").replace(/‍/g, "").replace(/️/g, "").trim();
   return cleaned !== "" ? cleaned : key;
 }
+function splitTrailingEmoji(key) {
+  var _a;
+  const isEmojiCp = (cp) => EMOJI_CHAR_RE.test(cp) || cp === "\uFE0F" || cp === "\u200D";
+  const cps = Array.from(key);
+  let i = cps.length;
+  while (i > 0 && isEmojiCp((_a = cps[i - 1]) != null ? _a : "")) i--;
+  if (i === 0 || i === cps.length) return null;
+  const base = cps.slice(0, i).join("").trim();
+  if (base === "") return null;
+  return { base, marker: cps.slice(i).join("") };
+}
+function compareFromKeys(keys) {
+  var _a;
+  if (keys.length < 4) return null;
+  const splits = keys.map(splitTrailingEmoji);
+  if (splits.some((s) => s === null)) return null;
+  const markerOrder = [];
+  const byBase = /* @__PURE__ */ new Map();
+  for (const s of splits) {
+    if (s === null) return null;
+    const markers = (_a = byBase.get(s.base)) != null ? _a : [];
+    if (!markers.includes(s.marker)) markers.push(s.marker);
+    byBase.set(s.base, markers);
+    if (!markerOrder.includes(s.marker)) markerOrder.push(s.marker);
+  }
+  if (markerOrder.length !== 2) return null;
+  for (const markers of byBase.values()) {
+    if (markers.length !== 2 || markers.some((m) => !markerOrder.includes(m))) return null;
+  }
+  return { bases: [...byBase.keys()], markers: [markerOrder[0], markerOrder[1]] };
+}
 function detectedToSections(detected) {
   return detected.map((d, i) => {
+    const paired = compareFromKeys(d.fieldKeys);
+    if (paired !== null) {
+      return {
+        id: `sec-${i + 1}`,
+        heading: d.heading,
+        type: "compare",
+        fields: paired.bases.map((base) => ({ key: base, label: defaultLabel(base) })),
+        compare: {
+          series: [
+            { marker: paired.markers[0], label: paired.markers[0] },
+            { marker: paired.markers[1], label: paired.markers[1] }
+          ]
+        }
+      };
+    }
     const type = suggestType(d.heading, d.fieldKeys.length);
     return {
       id: `sec-${i + 1}`,
@@ -3330,7 +3625,8 @@ var SECTION_TYPE_LABEL = {
   data: "\u6570\u636E",
   text: "\u6587\u672C",
   list: "\u5217\u8868",
-  paragraph: "\u6BB5\u843D"
+  paragraph: "\u6BB5\u843D",
+  compare: "\u5BF9\u6BD4\u6570\u636E"
 };
 var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
   constructor(app, plugin) {
@@ -3536,12 +3832,22 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         await this.plugin.saveConfig();
       });
     }).addDropdown((drop) => {
-      for (const type of ["checkin", "data", "text", "list", "paragraph"]) {
+      for (const type of [
+        "checkin",
+        "data",
+        "text",
+        "list",
+        "paragraph",
+        "compare"
+      ]) {
         drop.addOption(type, t(SECTION_TYPE_LABEL[type]));
       }
       drop.setValue(section.type);
       drop.onChange(async (value) => {
         section.type = value;
+        if (section.type === "compare" && section.compare === void 0) {
+          section.compare = { series: defaultCompareSeries() };
+        }
         await this.plugin.saveConfig();
         this.display();
       });
@@ -3581,6 +3887,27 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         });
       });
       return;
+    }
+    if (section.type === "compare") {
+      if (section.compare === void 0) section.compare = { series: defaultCompareSeries() };
+      const series = section.compare.series;
+      for (const [i, s] of series.entries()) {
+        new import_obsidian10.Setting(container).setName(t(i === 0 ? "\u7CFB\u5217\u4E00" : "\u7CFB\u5217\u4E8C")).setDesc(t("\u62FC\u5728\u5B57\u6BB5\u952E\u5C3E\u90E8\u7684 emoji\uFF08\u7B14\u8BB0\u952E = \u57FA\u7840\u952E + \u6807\u8BB0\uFF09\uFF0C\u4E24\u4E2A\u7CFB\u5217\u7528\u4E0D\u540C emoji")).addText((text) => {
+          text.setPlaceholder(t("\u7CFB\u5217\u6807\u8BB0"));
+          text.setValue(s.marker);
+          text.onChange(async (value) => {
+            s.marker = value.trim();
+            await this.plugin.saveConfig();
+          });
+        }).addText((text) => {
+          text.setPlaceholder(t("\u7CFB\u5217\u540D\u79F0"));
+          text.setValue(s.label);
+          text.onChange(async (value) => {
+            s.label = value.trim();
+            await this.plugin.saveConfig();
+          });
+        });
+      }
     }
     if (section.type === "paragraph") return;
     for (const field of section.fields) {
@@ -3757,7 +4084,7 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
   }
   openSectionCapture(type, section) {
     if (section.type === "paragraph") {
-      void this.capture.paragraphContent(this.currentKey(type), section).then((initial) => {
+      void this.capture.paragraphContent(type, this.currentKey(type), section).then((initial) => {
         new CaptureModal(
           this.app,
           section.heading.replace(/^#+\s*/, ""),
@@ -3770,7 +4097,8 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       return;
     }
     if (section.fields.length > 0) {
-      void this.capture.sectionFieldValues(this.currentKey(type), section).then((values) => {
+      void this.capture.sectionFieldValues(type, this.currentKey(type), section).then((values) => {
+        var _a;
         new CaptureModal(
           this.app,
           section.heading.replace(/^#+\s*/, ""),
@@ -3778,7 +4106,8 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
           section.fields,
           (payload) => void this.performCapture(type, section, payload, false),
           "",
-          values
+          values,
+          section.type === "compare" ? (_a = section.compare) == null ? void 0 : _a.series : void 0
         ).open();
       });
       return;
