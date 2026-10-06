@@ -45,16 +45,26 @@ const TYPE_PREFIX: Record<PeriodType, string> = {
 	annual: "年 · ",
 };
 
+/** 汇总视图期间 → 对应的日志类型（季度视图没有自己的日志，读年度）。快速录入与雷达图共用。 */
+const PERIOD_KIND_TO_TYPE: Partial<Record<PeriodKind, PeriodType>> = {
+	week: "weekly",
+	month: "monthly",
+	quarter: "annual",
+	year: "annual",
+};
+
 export function cardShell(parent: HTMLElement, title: string): HTMLElement {
 	const card = parent.createDiv({ cls: "qj-card" });
 	card.createDiv({ cls: "qj-card-title", text: title });
 	return card;
 }
 
-/** 快速录入组件：所有日志类型的标题区各一枚按钮（周/月/年前缀区分）。 */
+/** 快速录入组件：日志（daily）按钮所有视图可见；周期日志只在与视图匹配的期间显示（季度随年）。 */
 export function renderQuickCapture(card: HTMLElement, ctx: SummaryCtx): void {
 	const row = card.createDiv({ cls: "qj-capture-row" });
-	for (const type of ["daily", "weekly", "monthly", "annual"] as PeriodType[]) {
+	const periodType = PERIOD_KIND_TO_TYPE[ctx.kind];
+	const types: PeriodType[] = periodType === undefined ? ["daily"] : ["daily", periodType];
+	for (const type of types) {
 		for (const section of ctx.plugin.config.journals[type].sections) {
 			const btn = row.createEl("button", {
 				cls: "qj-btn",
@@ -298,20 +308,12 @@ function createSvgEl(host: HTMLElement, tag: string, attrs: Record<string, strin
 	return el;
 }
 
-/** 汇总期间类型 → 对比区所在的日志类型（季度视图没有自己的日志，读年度）。 */
-const RADAR_KIND_TO_TYPE: Partial<Record<PeriodKind, PeriodType>> = {
-	week: "weekly",
-	month: "monthly",
-	quarter: "annual",
-	year: "annual",
-};
-
 /**
  * 对比雷达图组件：当前期间类型对应日志里的对比区段，两个系列画在同一张雷达上。
  * 笔记缺失给一键建骨架（骨架含两系列占位行）；只有一个系列有值时画单多边形。
  */
 export async function renderRadar(card: HTMLElement, app: App, ctx: SummaryCtx): Promise<void> {
-	const type = RADAR_KIND_TO_TYPE[ctx.kind];
+	const type = PERIOD_KIND_TO_TYPE[ctx.kind];
 	const journal = type !== undefined ? ctx.plugin.config.journals[type] : null;
 	const sections =
 		journal !== null
