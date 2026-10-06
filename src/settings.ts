@@ -1,6 +1,6 @@
 /**
  * 设置页（布局参考 Project Master：分 tab、一类一页、记住所在页）。
- * 通用：语言 / 视图打开位置 / 重置；日志：日/周/月/年各自目录与标题区；
+ * 通用：语言 / 视图打开位置 / 重置；日志：日/周/月/季/年各自目录与标题区；
  * 速记面板：显示已完成、滚动未完成标识。
  * 注意：设置对象字段名是 config（§4.8）。
  */
@@ -14,9 +14,10 @@ import { ConfirmModal } from "./ui/confirm-modal";
 import { setLanguage, t } from "./i18n";
 
 const TYPE_LABEL: Record<PeriodType, string> = {
-	daily: "日日志",
+	daily: "日志",
 	weekly: "周",
 	monthly: "月",
+	quarterly: "季度",
 	annual: "年",
 };
 
@@ -58,7 +59,7 @@ export class QJSettingTab extends PluginSettingTab {
 		const tabs = this.containerEl.createDiv({ cls: "qj-tabs" });
 		const items: { id: SettingsTabId; label: string }[] = [
 			{ id: "general", label: t("通用") },
-			{ id: "journals", label: t("日志") },
+			{ id: "journals", label: t("日志设置") },
 			{ id: "panel", label: t("速记面板") },
 		];
 		for (const item of items) {
@@ -80,7 +81,7 @@ export class QJSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName(t("统计")).setHeading();
 		new Setting(this.containerEl)
 			.setName(t("非daily任务计数"))
-			.setDesc(t("包含周/月/年日志中的任务（✅ 日期优先归属，无日期按期间起始日）"))
+			.setDesc(t("包含周/月/季/年日志中的任务（✅ 日期优先归属，无日期按期间起始日）"))
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
 					this.plugin.config.stats.includeNonDailyTasks = value;
@@ -147,11 +148,11 @@ export class QJSettingTab extends PluginSettingTab {
 		);
 	}
 
-	// ── 日志（日/周/月/年） ──────────────────────────────────────────────────
+	// ── 日志（日/周/月/季/年） ──────────────────────────────────────────────
 
 	private renderJournals(): void {
 		const tabs = this.containerEl.createDiv({ cls: "qj-tabs qj-tabs--inner" });
-		for (const type of ["daily", "weekly", "monthly", "annual"] as PeriodType[]) {
+		for (const type of ["daily", "weekly", "monthly", "quarterly", "annual"] as PeriodType[]) {
 			const btn = tabs.createEl("button", {
 				cls: `qj-btn${this.journalTab === type ? " is-active" : ""}`,
 				text: t(TYPE_LABEL[type]),
@@ -209,6 +210,25 @@ export class QJSettingTab extends PluginSettingTab {
 					.onClick(() => void this.detectFromTemplate()),
 			);
 
+		// 显示汇总面板（仅非 daily：控制汇总视图工具栏的期间页签，至少保留一个）
+		if (this.journalTab !== "daily") {
+			new Setting(this.containerEl)
+				.setName(t("显示汇总面板"))
+				.setDesc(t("在汇总视图工具栏显示该期间页签"))
+				.addToggle((toggle) =>
+					toggle.setValue(journal.summary !== false).onChange(async (value) => {
+						if (!value && this.enabledSummaryCount() <= 1) {
+							new Notice(t("至少保留一个汇总页签"));
+							this.display();
+							return;
+						}
+						journal.summary = value ? undefined : false;
+						await this.plugin.saveConfig();
+						this.plugin.refreshSummaryViews();
+					}),
+				);
+		}
+
 		new Setting(this.containerEl).setName(t("标题区")).setHeading();
 		for (const section of journal.sections) {
 			this.sectionEditor(journal, section);
@@ -227,6 +247,13 @@ export class QJSettingTab extends PluginSettingTab {
 					this.display();
 				}),
 		);
+	}
+
+	/** 仍开启汇总页签的非 daily 日志数（「显示汇总面板」至少保留一个）。 */
+	private enabledSummaryCount(): number {
+		return (["weekly", "monthly", "quarterly", "annual"] as const).filter(
+			(type) => this.plugin.config.journals[type].summary !== false,
+		).length;
 	}
 
 	/** 在文件名格式下方追加 moment 文档链接（可点击）。 */

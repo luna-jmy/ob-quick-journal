@@ -78,11 +78,12 @@ describe("骨架生成（round-trip）与类型键", () => {
 		expect(text).toContain("journal-date: 2026-09-25");
 	});
 
-	it("周/月/年骨架与目标键", () => {
+	it("周/月/季/年骨架与目标键", () => {
 		const now = new Date(2026, 8, 25); // 2026-W39 周五
 		expect(noteKeyFor("daily", now)).toBe("2026-09-25");
 		expect(noteKeyFor("weekly", now)).toBe("2026-W39");
 		expect(noteKeyFor("monthly", now)).toBe("2026-09");
+		expect(noteKeyFor("quarterly", now)).toBe("2026-Q3");
 		expect(noteKeyFor("annual", now)).toBe("2026");
 
 		const weekly = skeletonFor("weekly", now, DEFAULT_JOURNALS.weekly.sections);
@@ -93,6 +94,13 @@ describe("骨架生成（round-trip）与类型键", () => {
 		const monthly = skeletonFor("monthly", now, DEFAULT_JOURNALS.monthly.sections);
 		expect(monthly).toContain("# 2026-09 月度日志");
 		expect(monthly).toContain("type: monthly_review");
+
+		const quarterly = skeletonFor("quarterly", now, DEFAULT_JOURNALS.quarterly.sections);
+		expect(quarterly).toContain("# 2026-Q3 季度日志");
+		expect(quarterly).toContain("type: quarterly_review");
+		expect(quarterly).toContain("journal-date: 2026-07-01"); // 季度首日
+		expect(quarterly).toContain("quarter: Q3");
+		expect(quarterly).toContain("journal/quarterly");
 	});
 
 	it("v0.5 扁平配置迁移到按类型组织", () => {
@@ -110,15 +118,39 @@ describe("骨架生成（round-trip）与类型键", () => {
 		expect(migrated.journals.weekly.dir).toBe(DEFAULT_JOURNALS.weekly.dir);
 		expect(migrated.language).toBe("en");
 	});
+
+	it("已有布局自动补 daily-capture，原顺序不动", () => {
+		const cfg = mergeConfig({ summaryLayout: ["task-chart", "radar"] });
+		expect(cfg.summaryLayout.slice(0, 2)).toEqual(["task-chart", "radar"]);
+		expect(cfg.summaryLayout).toContain("daily-capture"); // 补在尾部
+	});
+
+	it("汇总页签开关：透传 false、缺省 undefined、全关兜底全开", () => {
+		const cfg = mergeConfig({ journals: { weekly: { summary: false } } });
+		expect(cfg.journals.weekly.summary).toBe(false);
+		expect(cfg.journals.monthly.summary).toBeUndefined();
+		expect(cfg.journals.quarterly.dir).toBe(DEFAULT_JOURNALS.quarterly.dir);
+		const allOff = mergeConfig({
+			journals: {
+				weekly: { summary: false },
+				monthly: { summary: false },
+				quarterly: { summary: false },
+				annual: { summary: false },
+			},
+		});
+		expect(allOff.journals.weekly.summary).toBeUndefined();
+		expect(allOff.journals.annual.summary).toBeUndefined();
+	});
 });
 
 describe("文件名格式（moment 语法子集）", () => {
 	const now = new Date(2026, 8, 25); // 2026-09-25，周 39
 
-	it("默认格式：日/周/月/年", () => {
+	it("默认格式：日/周/月/季/年", () => {
 		expect(noteKeyFor("daily", now)).toBe("2026-09-25");
 		expect(noteKeyFor("weekly", now)).toBe("2026-W39");
 		expect(noteKeyFor("monthly", now)).toBe("2026-09");
+		expect(noteKeyFor("quarterly", now)).toBe("2026-Q3");
 		expect(noteKeyFor("annual", now)).toBe("2026");
 	});
 

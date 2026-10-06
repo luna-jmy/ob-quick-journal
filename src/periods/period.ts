@@ -127,11 +127,12 @@ export function shiftPeriod(period: Period, step: number): Period {
 	return periodOf("year", new Date(period.start.getFullYear() + step, 0, 1));
 }
 
-/** 从笔记文件名解析期间归属：daily(YYYY-MM-DD) / weekly(YYYY-Www) / monthly(YYYY-MM) / annual(YYYY)。 */
+/** 从笔记文件名解析期间归属：daily(YYYY-MM-DD) / weekly(YYYY-Www) / monthly(YYYY-MM) / quarterly(YYYY-Q#) / annual(YYYY)。 */
 export function parseNoteDateKind(name: string): { kind: PeriodKind | "day"; key: string } | null {
 	const base = name.replace(/\.md$/i, "");
 	if (/^\d{4}-\d{2}-\d{2}$/.test(base)) return { kind: "day", key: base };
 	if (/^\d{4}-W\d{2}$/.test(base)) return { kind: "week", key: base };
+	if (/^\d{4}-Q[1-4]$/.test(base)) return { kind: "quarter", key: base };
 	if (/^\d{4}-\d{2}$/.test(base)) return { kind: "month", key: base };
 	if (/^\d{4}$/.test(base)) return { kind: "year", key: base };
 	return null;
@@ -139,7 +140,7 @@ export function parseNoteDateKind(name: string): { kind: PeriodKind | "day"; key
 
 /**
  * moment 风格的文件名格式（纯函数，语法子集与 moment 一致）：
- * 支持 YYYY YY MM M DD D ww w（ww = ISO 周）与 [字面量]；其余字符原样输出。
+ * 支持 YYYY YY MM M DD D ww w Q（ww = ISO 周，Q = 季度 1-4 不补零）与 [字面量]；其余字符原样输出。
  * 文档：https://momentjs.com/docs/#/displaying/format/
  */
 export function formatTokens(d: Date, fmt: string): string {
@@ -190,6 +191,11 @@ export function formatTokens(d: Date, fmt: string): string {
 		}
 		if (fmt[i] === "D") {
 			out += String(d.getDate());
+			i++;
+			continue;
+		}
+		if (fmt[i] === "Q") {
+			out += String(Math.floor(d.getMonth() / 3) + 1);
 			i++;
 			continue;
 		}

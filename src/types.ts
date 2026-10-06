@@ -1,14 +1,14 @@
 /**
  * 领域模型 + 默认值 + config 合并/迁移（纯函数，零 DOM、不 import obsidian）。
  *
- * v0.6 起配置按「日志类型」组织（daily / weekly / monthly / annual），每个类型一个
- * 目录 + 自己的快速录入标题区（周/月/年复盘即各自类型下的 text 标题区，命令调用、
+ * v0.6 起配置按「日志类型」组织（daily / weekly / monthly / quarterly / annual），每个类型一个
+ * 目录 + 自己的快速录入标题区（周/月/季/年复盘即各自类型下的 text 标题区，命令调用、
  * 无独立图标）。速记面板仍只聚合 daily。
  * 汇总视图有组件布局（顺序可编辑）与手工查询块；两个视图可配置默认打开位置。
  */
 
 export type SectionType = "checkin" | "data" | "text" | "list" | "paragraph" | "compare";
-export type PeriodType = "daily" | "weekly" | "monthly" | "annual";
+export type PeriodType = "daily" | "weekly" | "monthly" | "quarterly" | "annual";
 /** 查询组件支持的种类：Tasks 插件没有公开查询 API，只保留 Dataview（官方 api） */
 export type QueryKind = "dataview" | "dataviewjs";
 
@@ -72,9 +72,11 @@ export interface JournalConfig {
 	dir: string;
 	/** 「从模板识别」读取的笔记路径 */
 	templateNote: string;
-	/** 目标笔记文件名格式（moment 语法子集：YYYY YY MM M DD D ww w 与 [字面量]） */
+	/** 目标笔记文件名格式（moment 语法子集：YYYY YY MM M DD D ww w Q 与 [字面量]） */
 	filenameFormat: string;
 	sections: JournalSection[];
+	/** 汇总视图工具栏是否显示该期间页签（仅非 daily 有意义；缺省 = 显示，只持久化 false） */
+	summary?: boolean;
 }
 
 export interface CustomQuery {
@@ -209,6 +211,12 @@ export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
 			},
 		],
 	},
+	quarterly: {
+		dir: "500 Journal/515 Quarterly",
+		templateNote: "",
+		filenameFormat: "YYYY-[Q]Q",
+		sections: [],
+	},
 	annual: {
 		dir: "500 Journal/510 Annual",
 		templateNote: "",
@@ -217,8 +225,9 @@ export const DEFAULT_JOURNALS: Record<PeriodType, JournalConfig> = {
 	},
 };
 
-/** 汇总视图的组件 id（顺序即默认布局；快速录入固定为顶端整行条，不在此列）。 */
+/** 汇总视图的组件 id（顺序即默认布局；顶部录入条只放当前期间、不在此列）。 */
 export const DEFAULT_SUMMARY_LAYOUT = [
+	"daily-capture",
 	"task-chart",
 	"checkin",
 	"trend",
@@ -246,7 +255,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 const SECTION_TYPES: SectionType[] = ["checkin", "data", "text", "list", "paragraph", "compare"];
-const PERIOD_TYPES: PeriodType[] = ["daily", "weekly", "monthly", "annual"];
+const PERIOD_TYPES: PeriodType[] = ["daily", "weekly", "monthly", "quarterly", "annual"];
 const QUERY_KINDS: QueryKind[] = ["dataview", "dataviewjs"];
 
 /** compare 系列清洗：恰好两条、marker 去空白非空、label 空则回退 marker；不合格整个丢弃。 */
@@ -311,7 +320,13 @@ function sanitizeJournal(raw: unknown, fallback: JournalConfig): JournalConfig {
 	} else {
 		sections = fallback.sections;
 	}
-	return { dir, templateNote, filenameFormat, sections };
+	return {
+		dir,
+		templateNote,
+		filenameFormat,
+		sections,
+		...(raw.summary === false ? { summary: false } : {}),
+	};
 }
 
 function sanitizeQueries(raw: unknown): CustomQuery[] {
@@ -364,6 +379,11 @@ export function mergeConfig(saved: unknown): QJConfig {
 			},
 			base.journals.daily,
 		);
+	}
+	// 汇总页签兜底：周/月/季/年全关时全部恢复（工具栏至少留一个页签）
+	const summaryKinds: PeriodType[] = ["weekly", "monthly", "quarterly", "annual"];
+	if (summaryKinds.every((type) => base.journals[type].summary === false)) {
+		for (const type of summaryKinds) base.journals[type].summary = undefined;
 	}
 	base.summaryLayout = sanitizeLayout(saved.summaryLayout);
 	base.summaryQueries = sanitizeQueries(saved.summaryQueries);

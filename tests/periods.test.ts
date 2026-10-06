@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
 	dateKey,
+	formatTokens,
 	isoWeekOf,
 	mondayOfIsoWeek,
+	parseNoteDateKind,
 	periodFromKey,
 	periodOf,
 	shiftPeriod,
@@ -73,5 +75,19 @@ describe("期间模型", () => {
 		expect(periodFromKey("2026-Q9")).toBeNull();
 		expect(shiftPeriod(q3, 1).key).toBe("2026-Q4");
 		expect(shiftPeriod(q3, 2).key).toBe("2027-Q1"); // 跨年
+	});
+
+	it("parseNoteDateKind 认得季度文件名", () => {
+		expect(parseNoteDateKind("2026-Q3.md")).toEqual({ kind: "quarter", key: "2026-Q3" });
+		expect(parseNoteDateKind("2026-Q1")).toEqual({ kind: "quarter", key: "2026-Q1" });
+		expect(parseNoteDateKind("2026-Q9.md")).toBeNull();
+		// 与月文件名不混淆：YYYY-Q# 与 YYYY-MM 形态互斥
+		expect(parseNoteDateKind("2026-09.md")).toEqual({ kind: "month", key: "2026-09" });
+	});
+
+	it("formatTokens 的 Q token（季度 1-4，不补零）", () => {
+		expect(formatTokens(new Date(2026, 8, 25), "YYYY-[Q]Q")).toBe("2026-Q3");
+		expect(formatTokens(new Date(2026, 0, 15), "YYYY-[Q]Q")).toBe("2026-Q1");
+		expect(formatTokens(new Date(2026, 11, 31), "YYYY-[Q]Q")).toBe("2026-Q4");
 	});
 });

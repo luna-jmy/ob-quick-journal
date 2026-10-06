@@ -1,6 +1,6 @@
 /**
  * Quick Journal 入口：薄装配层——registerView / 命令 / ribbon / 设置。
- * 快速录入按日志类型（日/周/月/年）各有标题区；周/月/年复盘不设图标，命令调用，
+ * 快速录入按日志类型（日/周/月/季/年）各有标题区；周/月/季/年复盘不设图标，命令调用，
  * 汇总视图的快速录入条也有入口。
  */
 
@@ -11,7 +11,7 @@ import { setLanguage, t } from "./i18n";
 import { CaptureService } from "./services/capture-service";
 import { ensureNote } from "./services/file-writer";
 import { VaultIndex } from "./services/vault-index";
-import { skeletonFor } from "./capture/skeleton";
+import { skeletonFor, noteKeyFor } from "./capture/skeleton";
 import { CaptureModal } from "./ui/capture-modal";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { ActionPickerModal } from "./ui/action-picker-modal";
@@ -24,6 +24,7 @@ const TYPE_PREFIX: Record<PeriodType, string> = {
 	daily: "",
 	weekly: "周 · ",
 	monthly: "月 · ",
+	quarterly: "季 · ",
 	annual: "年 · ",
 };
 
@@ -61,7 +62,7 @@ export default class QuickJournalPlugin extends Plugin {
 			callback: () => void this.openView(VIEW_TYPE_QJ_PANEL, this.config.viewLocations.panel),
 		});
 
-		for (const type of ["daily", "weekly", "monthly", "annual"] as PeriodType[]) {
+		for (const type of ["daily", "weekly", "monthly", "quarterly", "annual"] as PeriodType[]) {
 			for (const section of this.config.journals[type].sections) {
 				this.addSectionCommand(type, section);
 			}
@@ -139,15 +140,10 @@ export default class QuickJournalPlugin extends Plugin {
 		).open();
 	}
 
-	/** 各类型「当天」的键（段落预填定位用）。 */
+	/** 各类型「当天」的键（预填定位用；跟随各日志配置的文件名格式）。 */
 	private currentKey(type: PeriodType): string {
 		if (type === "daily") return dateKey(new Date());
-		const now = new Date();
-		if (type === "weekly") {
-			return this.capture.weeklyPath(now).split("/").pop()!.replace(/\.md$/, "");
-		}
-		if (type === "monthly") return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-		return String(now.getFullYear());
+		return noteKeyFor(type, new Date(), this.config.journals[type].filenameFormat);
 	}
 
 	/** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */

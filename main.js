@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-10-06T06:17:11.465Z */
+/* Quick Journal — bundled 2026-10-06T07:15:33.361Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -140,6 +140,12 @@ var DEFAULT_JOURNALS = {
       }
     ]
   },
+  quarterly: {
+    dir: "500 Journal/515 Quarterly",
+    templateNote: "",
+    filenameFormat: "YYYY-[Q]Q",
+    sections: []
+  },
   annual: {
     dir: "500 Journal/510 Annual",
     templateNote: "",
@@ -148,6 +154,7 @@ var DEFAULT_JOURNALS = {
   }
 };
 var DEFAULT_SUMMARY_LAYOUT = [
+  "daily-capture",
   "task-chart",
   "checkin",
   "trend",
@@ -172,7 +179,7 @@ function isRecord(v) {
   return typeof v === "object" && v !== null;
 }
 var SECTION_TYPES = ["checkin", "data", "text", "list", "paragraph", "compare"];
-var PERIOD_TYPES = ["daily", "weekly", "monthly", "annual"];
+var PERIOD_TYPES = ["daily", "weekly", "monthly", "quarterly", "annual"];
 var QUERY_KINDS = ["dataview", "dataviewjs"];
 function sanitizeCompare(raw) {
   const cmp = isRecord(raw) && isRecord(raw.compare) ? raw.compare : void 0;
@@ -223,7 +230,13 @@ function sanitizeJournal(raw, fallback) {
   } else {
     sections = fallback.sections;
   }
-  return { dir, templateNote, filenameFormat, sections };
+  return {
+    dir,
+    templateNote,
+    filenameFormat,
+    sections,
+    ...raw.summary === false ? { summary: false } : {}
+  };
 }
 function sanitizeQueries(raw) {
   if (!Array.isArray(raw)) return [];
@@ -265,6 +278,10 @@ function mergeConfig(saved) {
       },
       base.journals.daily
     );
+  }
+  const summaryKinds = ["weekly", "monthly", "quarterly", "annual"];
+  if (summaryKinds.every((type) => base.journals[type].summary === false)) {
+    for (const type of summaryKinds) base.journals[type].summary = void 0;
   }
   base.summaryLayout = sanitizeLayout(saved.summaryLayout);
   base.summaryQueries = sanitizeQueries(saved.summaryQueries);
@@ -404,16 +421,21 @@ var EN = {
   "Enter \u53D1\u9001": "Enter to send",
   "\u5F52\u6863": "Archive",
   "\u901A\u7528": "General",
-  "\u65E5\u5FD7": "Journals",
+  "\u65E5\u5FD7\u8BBE\u7F6E": "Journals",
+  "\u65E5\u5FD7": "Daily",
+  "\u65E5\u5FD7\u5F55\u5165": "Daily capture",
+  "\u663E\u793A\u6C47\u603B\u9762\u677F": "Show summary tab",
+  "\u5728\u6C47\u603B\u89C6\u56FE\u5DE5\u5177\u680F\u663E\u793A\u8BE5\u671F\u95F4\u9875\u7B7E": "Show this period's tab in the summary view toolbar",
+  "\u81F3\u5C11\u4FDD\u7559\u4E00\u4E2A\u6C47\u603B\u9875\u7B7E": "Keep at least one summary tab enabled",
   "\u7EDF\u8BA1": "Statistics",
   "\u975Edaily\u4EFB\u52A1\u8BA1\u6570": "Count non-daily tasks",
-  "\u5305\u542B\u5468/\u6708/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09": "Include tasks from weekly/monthly/annual journals (by \u2705 date, falling back to the period start)",
+  "\u5305\u542B\u5468/\u6708/\u5B63/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09": "Include tasks from weekly/monthly/quarterly/annual journals (by \u2705 date, falling back to the period start)",
   "\u6DFB\u52A0\u9644\u4EF6": "Add attachment",
   "\u4FDD\u5B58\u4FEE\u6539": "Save changes",
   "\u5B63\u5EA6": "Quarter",
   "\u542B\u5B50\u76EE\u5F55\uFF0C\u9012\u5F52\u8BC6\u522B": "Subfolders included (recursive)",
   "\u6587\u4EF6\u540D\u683C\u5F0F": "Filename format",
-  "\u6587\u4EF6\u540D\u683C\u5F0F\u8BF4\u660E": "Target note filename, moment-style tokens (YYYY MM DD ww and [literals]); docs:",
+  "\u6587\u4EF6\u540D\u683C\u5F0F\u8BF4\u660E": "Target note filename, moment-style tokens (YYYY MM DD ww Q and [literals]); docs:",
   "\u793A\u4F8B\uFF1AYYYY-MM-DD": "e.g. YYYY-MM-DD",
   "\u67E5\u8BE2\u6807\u9898": "Query title",
   "\u9700\u8981 Dataview \u6E32\u67D3": "Requires the Dataview plugin",
@@ -427,7 +449,6 @@ var EN = {
   "\u4E94": "Fr",
   "\u516D": "Sa",
   "\u65E5": "Su",
-  "\u65E5\u65E5\u5FD7": "Daily",
   "\u7F16\u8F91\u6A21\u5F0F": "Edit layout",
   "\u9000\u51FA\u7F16\u8F91": "Done editing",
   "\u6DFB\u52A0\u7EC4\u4EF6": "Add component",
@@ -459,7 +480,6 @@ var EN = {
   "\u8DDF\u968F Obsidian": "Follow Obsidian",
   "\u4E2D\u6587": "Chinese",
   "\u82F1\u6587": "English",
-  "\u65E5\u65E5\u5FD7\u76EE\u5F55": "Daily notes folder",
   "\u793A\u4F8B\uFF1A500 Journal/540 Daily": "e.g. 500 Journal/540 Daily",
   "\u6A21\u677F\u7B14\u8BB0": "Template note",
   "\u4ECE\u6A21\u677F\u8BC6\u522B\u8BF4\u660E": "Read this note and rebuild the heading sections below from its headings and inline fields.",
@@ -878,6 +898,7 @@ function parseNoteDateKind(name) {
   const base = name.replace(/\.md$/i, "");
   if (/^\d{4}-\d{2}-\d{2}$/.test(base)) return { kind: "day", key: base };
   if (/^\d{4}-W\d{2}$/.test(base)) return { kind: "week", key: base };
+  if (/^\d{4}-Q[1-4]$/.test(base)) return { kind: "quarter", key: base };
   if (/^\d{4}-\d{2}$/.test(base)) return { kind: "month", key: base };
   if (/^\d{4}$/.test(base)) return { kind: "year", key: base };
   return null;
@@ -933,6 +954,11 @@ function formatTokens(d, fmt) {
       i++;
       continue;
     }
+    if (fmt[i] === "Q") {
+      out += String(Math.floor(d.getMonth() / 3) + 1);
+      i++;
+      continue;
+    }
     if (fmt[i] === "w") {
       out += String(week);
       i++;
@@ -949,7 +975,7 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 function noteKeyFor(type, now, format) {
-  const fmt = format != null ? format : type === "weekly" ? "YYYY-[W]ww" : type === "monthly" ? "YYYY-MM" : type === "annual" ? "YYYY" : "YYYY-MM-DD";
+  const fmt = format != null ? format : type === "weekly" ? "YYYY-[W]ww" : type === "monthly" ? "YYYY-MM" : type === "quarterly" ? "YYYY-[Q]Q" : type === "annual" ? "YYYY" : "YYYY-MM-DD";
   return formatTokens(now, fmt);
 }
 function skeletonFor(type, now, sections, filenameFormat) {
@@ -988,6 +1014,22 @@ function skeletonFor(type, now, sections, filenameFormat) {
       "---"
     ];
     title = `# ${key} \u6708\u5EA6\u65E5\u5FD7`;
+  } else if (type === "quarterly") {
+    const q = Math.floor(now.getMonth() / 3) + 1;
+    const key = noteKeyFor("quarterly", now, filenameFormat);
+    frontmatter = [
+      "---",
+      "journal: Quarterly",
+      `journal-date: ${dateKey(new Date(now.getFullYear(), (q - 1) * 3, 1))}`,
+      "type: quarterly_review",
+      `year: ${now.getFullYear()}`,
+      `quarter: Q${q}`,
+      `created: ${day}`,
+      "tags:",
+      "  - journal/quarterly",
+      "---"
+    ];
+    title = `# ${key} \u5B63\u5EA6\u65E5\u5FD7`;
   } else if (type === "annual") {
     const key = noteKeyFor("annual", now, filenameFormat);
     frontmatter = [
@@ -1418,9 +1460,6 @@ var CaptureService = class {
   /** 兼容旧调用（面板 / 日志定位用）。 */
   dailyPath(now) {
     return this.notePath("daily", now);
-  }
-  weeklyPath(now) {
-    return this.notePath("weekly", now);
   }
   async performSection(type, section, payload, opts) {
     var _a, _b;
@@ -2058,27 +2097,32 @@ var TYPE_PREFIX = {
   daily: "",
   weekly: "\u5468 \xB7 ",
   monthly: "\u6708 \xB7 ",
+  quarterly: "\u5B63 \xB7 ",
   annual: "\u5E74 \xB7 "
 };
 var PERIOD_KIND_TO_TYPE = {
   week: "weekly",
   month: "monthly",
-  quarter: "annual",
+  quarter: "quarterly",
   year: "annual"
 };
 function renderQuickCapture(card, ctx) {
+  const type = PERIOD_KIND_TO_TYPE[ctx.kind];
+  if (type === void 0) return;
+  renderCaptureRow(card, ctx, type);
+}
+function renderDailyCapture(card, ctx) {
+  renderCaptureRow(card, ctx, "daily");
+}
+function renderCaptureRow(card, ctx, type) {
   const row = card.createDiv({ cls: "qj-capture-row" });
-  const periodType = PERIOD_KIND_TO_TYPE[ctx.kind];
-  const types = periodType === void 0 ? ["daily"] : ["daily", periodType];
-  for (const type of types) {
-    for (const section of ctx.plugin.config.journals[type].sections) {
-      const btn = row.createEl("button", {
-        cls: "qj-btn",
-        text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`
-      });
-      btn.type = "button";
-      btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
-    }
+  for (const section of ctx.plugin.config.journals[type].sections) {
+    const btn = row.createEl("button", {
+      cls: "qj-btn",
+      text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`
+    });
+    btn.type = "button";
+    btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
   }
 }
 function renderTaskChart(card, ctx, metrics, done) {
@@ -2595,14 +2639,26 @@ var SummaryView = class extends import_obsidian6.ItemView {
     await this.render();
   }
   async render() {
+    var _a;
     const root = this.contentEl;
     root.empty();
     root.addClass("qj-summary-root");
+    const kinds = this.visibleKinds();
+    if (!kinds.includes(this.kind)) {
+      this.kind = (_a = kinds[0]) != null ? _a : "week";
+      this.period = periodOf(this.kind, /* @__PURE__ */ new Date());
+    }
     this.renderToolbar(root.createDiv({ cls: "qj-toolbar" }));
     await this.renderBody(root.createDiv({ cls: "qj-body" }));
   }
+  /** 配置允许显示的期间种类（各日志的「显示汇总面板」开关；至少一个，mergeConfig 兜底）。 */
+  visibleKinds() {
+    return ["week", "month", "quarter", "year"].filter(
+      (kind) => this.plugin.config.journals[PERIOD_KIND_TO_TYPE[kind]].summary !== false
+    );
+  }
   renderToolbar(toolbar) {
-    for (const kind of ["week", "month", "quarter", "year"]) {
+    for (const kind of this.visibleKinds()) {
       const btn = toolbar.createEl("button", {
         cls: `qj-btn qj-kind-btn${kind === this.kind ? " is-active" : ""}`,
         text: t(KIND_LABEL[kind])
@@ -2652,6 +2708,11 @@ var SummaryView = class extends import_obsidian6.ItemView {
   /** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由视图统一画）。 */
   components() {
     return [
+      {
+        id: "daily-capture",
+        title: t("\u65E5\u5FD7\u5F55\u5165"),
+        render: (card, ctx) => renderDailyCapture(card, ctx)
+      },
       {
         id: "task-chart",
         title: t("\u4EFB\u52A1\u5B8C\u6210\u7EDF\u8BA1"),
@@ -2725,7 +2786,7 @@ var SummaryView = class extends import_obsidian6.ItemView {
   }
   async renderBody(body) {
     const config = this.plugin.config;
-    const extraDirs = config.stats.includeNonDailyTasks ? ["weekly", "monthly", "annual"].map((type) => config.journals[type].dir).filter((dir) => dir.trim() !== "") : [];
+    const extraDirs = config.stats.includeNonDailyTasks ? ["weekly", "monthly", "quarterly", "annual"].map((type) => config.journals[type].dir).filter((dir) => dir.trim() !== "") : [];
     const index = new VaultIndex(
       this.app,
       config.journals.daily.dir,
@@ -2751,7 +2812,10 @@ var SummaryView = class extends import_obsidian6.ItemView {
       editing: this.editing,
       rerender: () => void this.render()
     };
-    renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
+    const stripType = PERIOD_KIND_TO_TYPE[this.kind];
+    if (stripType !== void 0 && config.journals[stripType].sections.length > 0) {
+      renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
+    }
     const defs = this.components();
     const visible = config.summaryLayout.map((id) => defs.find((d) => d.id === id)).filter((d) => d !== void 0).filter((d) => d.kinds === void 0 || d.kinds.includes(this.kind));
     const cards = body.createDiv({ cls: "qj-cards" });
@@ -3617,9 +3681,10 @@ function detectedToSections(detected) {
 
 // src/settings.ts
 var TYPE_LABEL = {
-  daily: "\u65E5\u65E5\u5FD7",
+  daily: "\u65E5\u5FD7",
   weekly: "\u5468",
   monthly: "\u6708",
+  quarterly: "\u5B63\u5EA6",
   annual: "\u5E74"
 };
 var SECTION_TYPE_LABEL = {
@@ -3652,7 +3717,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     const tabs = this.containerEl.createDiv({ cls: "qj-tabs" });
     const items = [
       { id: "general", label: t("\u901A\u7528") },
-      { id: "journals", label: t("\u65E5\u5FD7") },
+      { id: "journals", label: t("\u65E5\u5FD7\u8BBE\u7F6E") },
       { id: "panel", label: t("\u901F\u8BB0\u9762\u677F") }
     ];
     for (const item of items) {
@@ -3670,7 +3735,7 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
   // ── 通用 ────────────────────────────────────────────────────────────────
   renderGeneral() {
     new import_obsidian10.Setting(this.containerEl).setName(t("\u7EDF\u8BA1")).setHeading();
-    new import_obsidian10.Setting(this.containerEl).setName(t("\u975Edaily\u4EFB\u52A1\u8BA1\u6570")).setDesc(t("\u5305\u542B\u5468/\u6708/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09")).addToggle(
+    new import_obsidian10.Setting(this.containerEl).setName(t("\u975Edaily\u4EFB\u52A1\u8BA1\u6570")).setDesc(t("\u5305\u542B\u5468/\u6708/\u5B63/\u5E74\u65E5\u5FD7\u4E2D\u7684\u4EFB\u52A1\uFF08\u2705 \u65E5\u671F\u4F18\u5148\u5F52\u5C5E\uFF0C\u65E0\u65E5\u671F\u6309\u671F\u95F4\u8D77\u59CB\u65E5\uFF09")).addToggle(
       (toggle) => toggle.setValue(this.plugin.config.stats.includeNonDailyTasks).onChange(async (value) => {
         this.plugin.config.stats.includeNonDailyTasks = value;
         await this.plugin.saveConfig();
@@ -3728,10 +3793,10 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
       })
     );
   }
-  // ── 日志（日/周/月/年） ──────────────────────────────────────────────────
+  // ── 日志（日/周/月/季/年） ──────────────────────────────────────────────
   renderJournals() {
     const tabs = this.containerEl.createDiv({ cls: "qj-tabs qj-tabs--inner" });
-    for (const type of ["daily", "weekly", "monthly", "annual"]) {
+    for (const type of ["daily", "weekly", "monthly", "quarterly", "annual"]) {
       const btn = tabs.createEl("button", {
         cls: `qj-btn${this.journalTab === type ? " is-active" : ""}`,
         text: t(TYPE_LABEL[type])
@@ -3772,6 +3837,20 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
     }).addButton(
       (btn) => btn.setButtonText(t("\u4ECE\u6A21\u677F\u8BC6\u522B")).setCta().onClick(() => void this.detectFromTemplate())
     );
+    if (this.journalTab !== "daily") {
+      new import_obsidian10.Setting(this.containerEl).setName(t("\u663E\u793A\u6C47\u603B\u9762\u677F")).setDesc(t("\u5728\u6C47\u603B\u89C6\u56FE\u5DE5\u5177\u680F\u663E\u793A\u8BE5\u671F\u95F4\u9875\u7B7E")).addToggle(
+        (toggle) => toggle.setValue(journal.summary !== false).onChange(async (value) => {
+          if (!value && this.enabledSummaryCount() <= 1) {
+            new import_obsidian10.Notice(t("\u81F3\u5C11\u4FDD\u7559\u4E00\u4E2A\u6C47\u603B\u9875\u7B7E"));
+            this.display();
+            return;
+          }
+          journal.summary = value ? void 0 : false;
+          await this.plugin.saveConfig();
+          this.plugin.refreshSummaryViews();
+        })
+      );
+    }
     new import_obsidian10.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
     for (const section of journal.sections) {
       this.sectionEditor(journal, section);
@@ -3788,6 +3867,12 @@ var QJSettingTab = class extends import_obsidian10.PluginSettingTab {
         this.display();
       })
     );
+  }
+  /** 仍开启汇总页签的非 daily 日志数（「显示汇总面板」至少保留一个）。 */
+  enabledSummaryCount() {
+    return ["weekly", "monthly", "quarterly", "annual"].filter(
+      (type) => this.plugin.config.journals[type].summary !== false
+    ).length;
   }
   /** 在文件名格式下方追加 moment 文档链接（可点击）。 */
   appendMomentLink() {
@@ -4025,6 +4110,7 @@ var TYPE_PREFIX2 = {
   daily: "",
   weekly: "\u5468 \xB7 ",
   monthly: "\u6708 \xB7 ",
+  quarterly: "\u5B63 \xB7 ",
   annual: "\u5E74 \xB7 "
 };
 var QuickJournalPlugin = class extends import_obsidian11.Plugin {
@@ -4053,7 +4139,7 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       name: t("\u6253\u5F00\u901F\u8BB0\u9762\u677F"),
       callback: () => void this.openView(VIEW_TYPE_QJ_PANEL, this.config.viewLocations.panel)
     });
-    for (const type of ["daily", "weekly", "monthly", "annual"]) {
+    for (const type of ["daily", "weekly", "monthly", "quarterly", "annual"]) {
       for (const section of this.config.journals[type].sections) {
         this.addSectionCommand(type, section);
       }
@@ -4122,15 +4208,10 @@ var QuickJournalPlugin = class extends import_obsidian11.Plugin {
       (payload) => void this.performCapture(type, section, payload, false)
     ).open();
   }
-  /** 各类型「当天」的键（段落预填定位用）。 */
+  /** 各类型「当天」的键（预填定位用；跟随各日志配置的文件名格式）。 */
   currentKey(type) {
     if (type === "daily") return dateKey(/* @__PURE__ */ new Date());
-    const now = /* @__PURE__ */ new Date();
-    if (type === "weekly") {
-      return this.capture.weeklyPath(now).split("/").pop().replace(/\.md$/, "");
-    }
-    if (type === "monthly") return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return String(now.getFullYear());
+    return noteKeyFor(type, /* @__PURE__ */ new Date(), this.config.journals[type].filenameFormat);
   }
   /** 捕获执行（含覆盖确认流）；速记面板直发段落也走这里。 */
   async performCapture(type, section, payload, overwrite, now) {

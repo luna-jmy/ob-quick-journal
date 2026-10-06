@@ -63,10 +63,6 @@ export class CaptureService {
 		return this.notePath("daily", now);
 	}
 
-	weeklyPath(now: Date): string {
-		return this.notePath("weekly", now);
-	}
-
 	async performSection(
 		type: PeriodType,
 		section: JournalSection,

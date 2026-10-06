@@ -42,14 +42,15 @@ const TYPE_PREFIX: Record<PeriodType, string> = {
 	daily: "",
 	weekly: "周 · ",
 	monthly: "月 · ",
+	quarterly: "季 · ",
 	annual: "年 · ",
 };
 
-/** 汇总视图期间 → 对应的日志类型（季度视图没有自己的日志，读年度）。快速录入与雷达图共用。 */
-const PERIOD_KIND_TO_TYPE: Partial<Record<PeriodKind, PeriodType>> = {
+/** 汇总视图期间 → 对应的日志类型。录入条 / 雷达图 / 汇总页签开关共用。 */
+export const PERIOD_KIND_TO_TYPE: Partial<Record<PeriodKind, PeriodType>> = {
 	week: "weekly",
 	month: "monthly",
-	quarter: "annual",
+	quarter: "quarterly",
 	year: "annual",
 };
 
@@ -59,20 +60,28 @@ export function cardShell(parent: HTMLElement, title: string): HTMLElement {
 	return card;
 }
 
-/** 快速录入组件：日志（daily）按钮所有视图可见；周期日志只在与视图匹配的期间显示（季度随年）。 */
+/** 快速录入条：仅当前视图对应期间日志的标题区按钮（该期间无标题区时由视图整条隐藏）。 */
 export function renderQuickCapture(card: HTMLElement, ctx: SummaryCtx): void {
+	const type = PERIOD_KIND_TO_TYPE[ctx.kind];
+	if (type === undefined) return;
+	renderCaptureRow(card, ctx, type);
+}
+
+/** 日志录入卡片：日志（daily）标题区按钮，所有期间视图可见。 */
+export function renderDailyCapture(card: HTMLElement, ctx: SummaryCtx): void {
+	renderCaptureRow(card, ctx, "daily");
+}
+
+/** 按钮行共用：某日志类型的全部标题区按钮（前缀 + 去井号标题）。 */
+function renderCaptureRow(card: HTMLElement, ctx: SummaryCtx, type: PeriodType): void {
 	const row = card.createDiv({ cls: "qj-capture-row" });
-	const periodType = PERIOD_KIND_TO_TYPE[ctx.kind];
-	const types: PeriodType[] = periodType === undefined ? ["daily"] : ["daily", periodType];
-	for (const type of types) {
-		for (const section of ctx.plugin.config.journals[type].sections) {
-			const btn = row.createEl("button", {
-				cls: "qj-btn",
-				text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`,
-			});
-			btn.type = "button";
-			btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
-		}
+	for (const section of ctx.plugin.config.journals[type].sections) {
+		const btn = row.createEl("button", {
+			cls: "qj-btn",
+			text: `${TYPE_PREFIX[type]}${section.heading.replace(/^#+\s*/, "")}`,
+		});
+		btn.type = "button";
+		btn.onclick = () => ctx.plugin.openSectionCapture(type, section);
 	}
 }
 

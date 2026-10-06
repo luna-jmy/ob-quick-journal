@@ -10,8 +10,10 @@ import type QuickJournalPlugin from "../main";
 import { doneByDay, taskStats } from "../metrics/aggregate";
 import { VaultIndex } from "../services/vault-index";
 import {
+	PERIOD_KIND_TO_TYPE,
 	renderCalendar,
 	renderCheckin,
+	renderDailyCapture,
 	renderFeedMini,
 	renderHeatmap,
 	renderQuickCapture,
@@ -87,12 +89,25 @@ export class SummaryView extends ItemView {
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("qj-summary-root");
+		// 保存的视图状态可能指向已被设置关闭的期间 → 回退到第一个可见期间
+		const kinds = this.visibleKinds();
+		if (!kinds.includes(this.kind)) {
+			this.kind = kinds[0] ?? "week";
+			this.period = periodOf(this.kind, new Date());
+		}
 		this.renderToolbar(root.createDiv({ cls: "qj-toolbar" }));
 		await this.renderBody(root.createDiv({ cls: "qj-body" }));
 	}
 
+	/** 配置允许显示的期间种类（各日志的「显示汇总面板」开关；至少一个，mergeConfig 兜底）。 */
+	private visibleKinds(): PeriodKind[] {
+		return (["week", "month", "quarter", "year"] as PeriodKind[]).filter(
+			(kind) => this.plugin.config.journals[PERIOD_KIND_TO_TYPE[kind]!].summary !== false,
+		);
+	}
+
 	private renderToolbar(toolbar: HTMLElement): void {
-		for (const kind of ["week", "month", "quarter", "year"] as PeriodKind[]) {
+		for (const kind of this.visibleKinds()) {
 			const btn = toolbar.createEl("button", {
 				cls: `qj-btn qj-kind-btn${kind === this.kind ? " is-active" : ""}`,
 				text: t(KIND_LABEL[kind]),
@@ -146,6 +161,11 @@ export class SummaryView extends ItemView {
 	/** 组件注册表（title 仅用于编辑模式的添加面板；卡片标题由视图统一画）。 */
 	private components(): ComponentDef[] {
 		return [
+			{
+				id: "daily-capture",
+				title: t("日志录入"),
+				render: (card, ctx) => renderDailyCapture(card, ctx),
+			},
 			{
 				id: "task-chart",
 				title: t("任务完成统计"),
@@ -221,9 +241,9 @@ export class SummaryView extends ItemView {
 
 	private async renderBody(body: HTMLElement): Promise<void> {
 		const config = this.plugin.config;
-		// 非 daily 任务计数（开着时并入周/月/年日志的任务行）
+		// 非 daily 任务计数（开着时并入周/月/季/年日志的任务行）
 		const extraDirs = config.stats.includeNonDailyTasks
-			? (["weekly", "monthly", "annual"] as const)
+			? (["weekly", "monthly", "quarterly", "annual"] as const)
 					.map((type) => config.journals[type].dir)
 					.filter((dir) => dir.trim() !== "")
 			: [];
@@ -258,8 +278,11 @@ export class SummaryView extends ItemView {
 			rerender: () => void this.render(),
 		};
 
-		// 快速录入固定为顶端整行条（不卡片化、不进编辑布局）
-		renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
+		// 顶部录入条只放当前查看期间日志的标题区；该期间无标题区时整条隐藏
+		const stripType = PERIOD_KIND_TO_TYPE[this.kind];
+		if (stripType !== undefined && config.journals[stripType].sections.length > 0) {
+			renderQuickCapture(body.createDiv({ cls: "qj-capture-strip" }), ctx);
+		}
 
 		const defs = this.components();
 		const visible = config.summaryLayout

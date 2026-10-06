@@ -19,9 +19,11 @@ export function noteKeyFor(type: PeriodType, now: Date, format?: string): string
 			? "YYYY-[W]ww"
 			: type === "monthly"
 				? "YYYY-MM"
-				: type === "annual"
-					? "YYYY"
-					: "YYYY-MM-DD");
+				: type === "quarterly"
+					? "YYYY-[Q]Q"
+					: type === "annual"
+						? "YYYY"
+						: "YYYY-MM-DD");
 	return formatTokens(now, fmt);
 }
 
@@ -66,6 +68,22 @@ export function skeletonFor(
 			"---",
 		];
 		title = `# ${key} 月度日志`;
+	} else if (type === "quarterly") {
+		const q = Math.floor(now.getMonth() / 3) + 1;
+		const key = noteKeyFor("quarterly", now, filenameFormat);
+		frontmatter = [
+			"---",
+			"journal: Quarterly",
+			`journal-date: ${dateKey(new Date(now.getFullYear(), (q - 1) * 3, 1))}`,
+			"type: quarterly_review",
+			`year: ${now.getFullYear()}`,
+			`quarter: Q${q}`,
+			`created: ${day}`,
+			"tags:",
+			"  - journal/quarterly",
+			"---",
+		];
+		title = `# ${key} 季度日志`;
 	} else if (type === "annual") {
 		const key = noteKeyFor("annual", now, filenameFormat);
 		frontmatter = [
