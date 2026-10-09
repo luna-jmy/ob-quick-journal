@@ -173,6 +173,47 @@ describe("时间戳与段落", () => {
 	});
 });
 
+describe("任务标识驱动的条目分类（面板口径）", () => {
+	const SPEC = { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: ["I"] };
+	const NOTE = [
+		"# 日志",
+		"## 👀 GTD任务看板",
+		"- [ ] 待办",
+		"- [>] 顺延（open 标识）",
+		"- [x] 已完成",
+		"- [-] 已取消",
+		"- [/] 也算取消",
+		"- [I] 非任务，不进面板",
+		"- [D] 未识别字符，当普通列表行",
+	].join("\n");
+	const SECTIONS: JournalSection[] = [
+		{ id: "gtd", heading: "## 👀 GTD任务看板", type: "list", fields: [] },
+	];
+
+	it("按标识集判 taskState；nonTask 行不收集；未识别字符落到普通列表行", () => {
+		const entries = collectEntries("2026-10-09", NOTE.split("\n"), SECTIONS, SPEC);
+		expect(entries.map((e) => [e.taskStatus, e.taskState])).toEqual([
+			[" ", "open"],
+			[">", "open"],
+			["x", "done"],
+			["-", "cancelled"],
+			["/", "cancelled"],
+			// [I] 被跳过；[D] 无 taskStatus，text 保留原文（含方括号）
+			[undefined, undefined],
+		]);
+		expect(entries[5].text).toBe("[D] 未识别字符，当普通列表行");
+	});
+
+	it("默认标识集：[/] 算取消、[>] 算待办", () => {
+		const entries = collectEntries("2026-10-09", NOTE.split("\n"), SECTIONS);
+		const byStatus = new Map(entries.map((e) => [e.taskStatus, e.taskState]));
+		expect(byStatus.get("/")).toBe("cancelled");
+		expect(byStatus.get(">")).toBe("open");
+		expect(byStatus.has("I")).toBe(false); // 默认 nonTask 为空 → [I] 是普通列表行
+		expect(byStatus.has(undefined)).toBe(true);
+	});
+});
+
 describe("任务行采集（统计口径）", () => {
 	it("跳过代码围栏内的任务样式行；围栏外的照常采集", () => {
 		const lines = [

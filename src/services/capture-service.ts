@@ -207,9 +207,10 @@ export class CaptureService {
 		return this.mutateEntry(section, entry, null);
 	}
 
-	/** 切换任务完成态（面板点击状态符号）。 */
+	/** 切换任务完成态（面板点击状态符号）：待办/已取消 → 已完成（按配置的 done 标记写入）。 */
 	async toggleTaskEntry(section: JournalSection, entry: SectionEntry): Promise<EntryWriteResult> {
-		return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(new Date())));
+		const doneMarkers = this.getConfig().tasks.markers.done;
+		return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(new Date()), doneMarkers));
 	}
 
 	/** 列表 ↔ 任务互转（面板条目按钮）。 */

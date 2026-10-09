@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-10-09T05:28:59.010Z */
+/* Quick Journal — bundled 2026-10-09T05:55:16.236Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -171,7 +171,7 @@ var DEFAULT_CONFIG = {
   summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
   summaryQueries: [],
   viewLocations: { summary: "tab", panel: "tab" },
-  panel: { showCompleted: true },
+  panel: { showCompleted: true, showCancelled: true },
   stats: { includeNonDailyTasks: true },
   tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } }
 };
@@ -299,6 +299,9 @@ function mergeConfig(saved) {
     if (typeof saved.panel.showCompleted === "boolean") {
       base.panel.showCompleted = saved.panel.showCompleted;
     }
+    if (typeof saved.panel.showCancelled === "boolean") {
+      base.panel.showCancelled = saved.panel.showCancelled;
+    }
   }
   const legacyRollover = isRecord(saved.rollover) ? saved.rollover.openMarkers : void 0;
   if (isRecord(saved.tasks) || Array.isArray(legacyRollover)) {
@@ -402,6 +405,8 @@ var EN = {
   "\u5C55\u5F00\u5F55\u5165": "Show capture bar",
   "\u6536\u8D77\u5F55\u5165": "Hide capture bar",
   "\u663E\u793A\u5DF2\u5B8C\u6210\u4EFB\u52A1": "Show completed tasks",
+  "\u663E\u793A\u5DF2\u53D6\u6D88\u4EFB\u52A1": "Show cancelled tasks",
+  "\u5DF2\u53D6\u6D88\u4EFB\u52A1\u5728\u9762\u677F\u4E0A\u7528 \u2715 \u6807\u8BC6\uFF0C\u70B9\u51FB\u8F6C\u4E3A\u5DF2\u5B8C\u6210": "Cancelled tasks appear with a \u2715 marker in the feed; tap it to mark them completed",
   "\u672A\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6": "Unfinished task markers",
   "\u8BA1\u5165\u672A\u5B8C\u6210\u7EDF\u8BA1\u4E0E\u6EDA\u52A8\u7684\u52FE\u9009\u6846\u5B57\u7B26\uFF08\u7A7A\u683C\u59CB\u7EC8\u5305\u542B\uFF09\uFF0C\u9017\u53F7\u5206\u9694": "Checkbox characters counted as unfinished / rolled over (space is always included), comma-separated",
   "\u5DF2\u5B8C\u6210\u4EFB\u52A1\u6807\u8BC6": "Completed task markers",
@@ -409,7 +414,7 @@ var EN = {
   "\u53D6\u6D88\u4EFB\u52A1\u6807\u8BC6": "Cancelled task markers",
   "\u5B8C\u5168\u4E0D\u53C2\u4E0E\u4EFB\u4F55\u4EFB\u52A1\u7EDF\u8BA1\u7684\u5B57\u7B26\uFF0C\u9017\u53F7\u5206\u9694": "Characters excluded from all task statistics, comma-separated",
   "\u975E\u4EFB\u52A1\u6807\u8BC6": "Non-task markers",
-  "\u9884\u7559\uFF1A\u5F53\u524D\u540C\u53D6\u6D88\uFF08\u4E0D\u8BA1\u6570\uFF09\uFF0C\u5BF9\u5E94\u529F\u80FD\u540E\u7EED\u63D0\u4F9B\uFF0C\u9017\u53F7\u5206\u9694": "Reserved: currently same as cancelled (not counted); features to come, comma-separated",
+  "\u5E26\u8FD9\u4E9B\u5B57\u7B26\u7684\u884C\u4E0D\u8FDB\u901F\u8BB0\u9762\u677F\u4E5F\u4E0D\u8BA1\u6570\uFF0C\u9017\u53F7\u5206\u9694": "Lines with these characters are skipped by the capture feed and all statistics, comma-separated",
   "\u6EDA\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Roll over unfinished tasks",
   "\u79FB\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1": "Move unfinished tasks",
   "\u6765\u81EA": "From",
@@ -1104,6 +1109,19 @@ function parseTaskLine(line, doneMarkers = DEFAULT_DONE_MARKERS) {
 function parseTaskLines(lines, doneMarkers = DEFAULT_DONE_MARKERS) {
   return lines.map((l) => parseTaskLine(l, doneMarkers)).filter((t2) => t2 !== null);
 }
+var DEFAULT_TASK_SPEC = {
+  open: [">"],
+  done: ["x", "X"],
+  cancel: ["-", "/"],
+  nonTask: []
+};
+function classifyTaskStatus(status, spec = DEFAULT_TASK_SPEC) {
+  if (status === " " || spec.open.includes(status)) return "open";
+  if (spec.done.includes(status)) return "done";
+  if (spec.cancel.includes(status)) return "cancelled";
+  if (spec.nonTask.includes(status)) return "nonTask";
+  return null;
+}
 function collectTaskLines(lines, spec) {
   const allowed = spec ? /* @__PURE__ */ new Set([" ", ...spec.open, ...spec.done]) : null;
   const out = [];
@@ -1125,7 +1143,7 @@ function collectTaskLines(lines, spec) {
 // src/parse/section-entries.ts
 var BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
 var LIST_ITEM_RE = /^\s*[-*]\s+(.*)$/;
-var TASK_ITEM_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+var TASK_ITEM_RE = /^\s*[-*]\s+\[([^\][])\]\s*(.*)$/;
 var TIMESTAMP_RE = /^(\d{1,2}:\d{2})(?::\d{2})?\s+/;
 var ARCHIVE_RE = /\s*\[archive::\s*[^\]]*?\]\s*$/;
 function splitTimestamp(text) {
@@ -1138,7 +1156,7 @@ function stripArchive(line) {
   if (!m) return { line, archived: false };
   return { line: line.slice(0, m.index).trimEnd(), archived: true };
 }
-function collectEntries(date, lines, sections) {
+function collectEntries(date, lines, sections, spec = DEFAULT_TASK_SPEC) {
   var _a;
   const out = [];
   for (const section of sections) {
@@ -1209,22 +1227,27 @@ function collectEntries(date, lines, sections) {
       if (section.type !== "list") continue;
       const task = TASK_ITEM_RE.exec(line);
       if (task) {
-        if (task[2].trim() === "") continue;
-        const ts = splitTimestamp(task[2].trim());
-        out.push({
-          date,
-          sectionId: section.id,
-          kind: "line",
-          ...ts,
-          // 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
-          text: ts.text,
-          content: ts.text,
-          prefix: line.slice(0, line.length - task[2].length),
-          lineIndex: i,
-          raw: line,
-          taskStatus: task[1]
-        });
-        continue;
+        const state = classifyTaskStatus(task[1], spec);
+        if (state === "nonTask") continue;
+        if (state !== null) {
+          if (task[2].trim() === "") continue;
+          const ts = splitTimestamp(task[2].trim());
+          out.push({
+            date,
+            sectionId: section.id,
+            kind: "line",
+            ...ts,
+            // 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
+            text: ts.text,
+            content: ts.text,
+            prefix: line.slice(0, line.length - task[2].length),
+            lineIndex: i,
+            raw: line,
+            taskStatus: task[1],
+            taskState: state
+          });
+          continue;
+        }
       }
       const item = LIST_ITEM_RE.exec(line);
       if (item && item[1].trim() !== "") {
@@ -1308,17 +1331,19 @@ var VaultIndex = class {
   }
   /** 速记面板用：期间逐日的标题区内容条目（只采集，不做判断）。 */
   async collectEntries(days, sections) {
+    var _a;
     const byDate = /* @__PURE__ */ new Map();
     for (const file of this.filesUnder(this.dailyDir)) {
       const date = this.resolveDate(file);
       if (date && !byDate.has(date)) byDate.set(date, file);
     }
+    const spec = (_a = this.taskSpec) != null ? _a : DEFAULT_TASK_SPEC;
     const entries = [];
     for (const day of days) {
       const file = byDate.get(dateKey(day));
       if (!file) continue;
       const text = await this.app.vault.cachedRead(file);
-      entries.push(...collectEntries(dateKey(day), text.split(/\r?\n/), sections));
+      entries.push(...collectEntries(dateKey(day), text.split(/\r?\n/), sections, spec));
     }
     return entries;
   }
@@ -1365,25 +1390,26 @@ var VaultIndex = class {
 };
 
 // src/parse/line-ops.ts
-var TASK_LINE_RE = /^(\s*[-*]\s+\[)([ xX/-])(\]\s*)(.*)$/;
+var TASK_LINE_RE = /^(\s*[-*]\s+\[)([^\][])(\]\s*)(.*)$/;
 var LIST_LINE_RE = /^(\s*[-*]\s+)(\S.*)$/;
 var DONE_DATE_RE = /\s*✅\s*\d{4}-\d{2}-\d{2}\s*$/;
-function toggleTaskLine(raw, today) {
+function toggleTaskLine(raw, today, doneMarkers = DEFAULT_DONE_MARKERS) {
+  var _a;
   const m = TASK_LINE_RE.exec(raw);
   if (!m) return null;
   const [, head, status, tail, body] = m;
-  if (status === "x" || status === "X") {
+  if (doneMarkers.includes(status)) {
     const undone = body.replace(DONE_DATE_RE, "");
     return `${head} ${tail}${undone.trimEnd()}`;
   }
   const cleaned = body.replace(DONE_DATE_RE, "").trimEnd();
-  return `${head}x${tail}${cleaned} \u2705 ${today}`;
+  return `${head}${(_a = doneMarkers[0]) != null ? _a : "x"}${tail}${cleaned} \u2705 ${today}`;
 }
 function convertListTask(raw) {
   const task = TASK_LINE_RE.exec(raw);
   if (task) {
     const [, head, status, , body] = task;
-    const cleaned = (status === "x" || status === "X" ? body.replace(DONE_DATE_RE, "") : body).trim();
+    const cleaned = (DEFAULT_DONE_MARKERS.includes(status) ? body.replace(DONE_DATE_RE, "") : body).trim();
     return `${head.replace(/\[\s*$/, "")}${cleaned}`;
   }
   const list = LIST_LINE_RE.exec(raw);
@@ -1392,11 +1418,10 @@ function convertListTask(raw) {
   }
   return null;
 }
-function taskSymbol(status) {
-  if (status === " ") return "\u2610";
-  if (status === "x" || status === "X") return "\u2611";
-  if (status === "-") return "\u2715";
-  return "\u25D0";
+function taskSymbol(state, status) {
+  if (state === "done") return "\u2611";
+  if (state === "cancelled") return "\u2715";
+  return status === " " ? "\u2610" : "\u25D0";
 }
 
 // src/services/file-writer.ts
@@ -1581,9 +1606,10 @@ var CaptureService = class {
   async deleteEntry(section, entry) {
     return this.mutateEntry(section, entry, null);
   }
-  /** 切换任务完成态（面板点击状态符号）。 */
+  /** 切换任务完成态（面板点击状态符号）：待办/已取消 → 已完成（按配置的 done 标记写入）。 */
   async toggleTaskEntry(section, entry) {
-    return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(/* @__PURE__ */ new Date())));
+    const doneMarkers = this.getConfig().tasks.markers.done;
+    return this.rewriteRawLine(entry, (raw) => toggleTaskLine(raw, dateKey(/* @__PURE__ */ new Date()), doneMarkers));
   }
   /** 列表 ↔ 任务互转（面板条目按钮）。 */
   async convertEntry(section, entry) {
@@ -2504,7 +2530,7 @@ function renderFeedMini(card, ctx) {
         cls: "qj-feed-meta",
         text: `${(_a = names.get(e.sectionId)) != null ? _a : ""}${e.time ? ` \xB7 ${e.time}` : ""}`
       });
-      const text = e.taskStatus !== void 0 ? `${taskSymbol(e.taskStatus)} ${e.text}` : e.text;
+      const text = e.taskState !== void 0 && e.taskStatus !== void 0 ? `${taskSymbol(e.taskState, e.taskStatus)} ${e.text}` : e.text;
       row.createSpan({ cls: "qj-mini-text", text: text.replace(/\n/g, " ") });
     }
   }
@@ -3147,6 +3173,9 @@ var PanelView = class extends import_obsidian10.ItemView {
   get showDone() {
     return this.plugin.config.panel.showCompleted;
   }
+  get showCancelled() {
+    return this.plugin.config.panel.showCancelled;
+  }
   getViewType() {
     return VIEW_TYPE_QJ_PANEL;
   }
@@ -3417,7 +3446,12 @@ var PanelView = class extends import_obsidian10.ItemView {
       this.renderFeed();
       return;
     }
-    const index = new VaultIndex(this.app, this.plugin.config.journals.daily.dir);
+    const index = new VaultIndex(
+      this.app,
+      this.plugin.config.journals.daily.dir,
+      [],
+      this.plugin.config.tasks.markers
+    );
     const today = /* @__PURE__ */ new Date();
     const days = Array.from({ length: this.rangeDays }, (_, i) => {
       const d = new Date(today);
@@ -3430,9 +3464,8 @@ var PanelView = class extends import_obsidian10.ItemView {
   visibleEntries(sections) {
     let list = this.entries;
     if (this.filterId !== "") list = list.filter((e) => e.sectionId === this.filterId);
-    if (!this.showDone) {
-      list = list.filter((e) => !(e.taskStatus === "x" || e.taskStatus === "X"));
-    }
+    if (!this.showDone) list = list.filter((e) => e.taskState !== "done");
+    if (!this.showCancelled) list = list.filter((e) => e.taskState !== "cancelled");
     const q = this.searchText.trim().toLowerCase();
     if (q !== "") {
       const name = new Map(sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]));
@@ -3477,14 +3510,14 @@ var PanelView = class extends import_obsidian10.ItemView {
     }
   }
   renderItem(day, date, section, entry, name) {
-    var _a;
+    var _a, _b;
     const item = day.createDiv({ cls: "qj-feed-item" });
     const head = item.createDiv({ cls: "qj-feed-head" });
     const meta = head.createDiv({ cls: "qj-feed-meta" });
     if (entry.taskStatus !== void 0) {
       const toggle = meta.createEl("button", { cls: "qj-feed-toggle" });
       toggle.type = "button";
-      toggle.setText(entry.taskStatus === "x" || entry.taskStatus === "X" ? "\u2611" : "\u2610");
+      toggle.setText(taskSymbol((_a = entry.taskState) != null ? _a : "open", entry.taskStatus));
       toggle.setAttribute("aria-label", t("\u5207\u6362\u5B8C\u6210"));
       toggle.onclick = (evt) => {
         evt.stopPropagation();
@@ -3530,7 +3563,7 @@ var PanelView = class extends import_obsidian10.ItemView {
         this.app,
         entry.text,
         body,
-        (_a = file == null ? void 0 : file.path) != null ? _a : "",
+        (_b = file == null ? void 0 : file.path) != null ? _b : "",
         this
       );
     } else {
@@ -4085,6 +4118,13 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
         this.plugin.refreshPanelViews();
       })
     );
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u663E\u793A\u5DF2\u53D6\u6D88\u4EFB\u52A1")).setDesc(t("\u5DF2\u53D6\u6D88\u4EFB\u52A1\u5728\u9762\u677F\u4E0A\u7528 \u2715 \u6807\u8BC6\uFF0C\u70B9\u51FB\u8F6C\u4E3A\u5DF2\u5B8C\u6210")).addToggle(
+      (toggle) => toggle.setValue(this.plugin.config.panel.showCancelled).onChange(async (value) => {
+        this.plugin.config.panel.showCancelled = value;
+        await this.plugin.saveConfig();
+        this.plugin.refreshPanelViews();
+      })
+    );
   }
   /** 通用 → 统计 的任务标识组（未完成/已完成/取消/非任务）。 */
   renderTaskMarkers() {
@@ -4130,7 +4170,7 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
     );
     markerInput(
       t("\u975E\u4EFB\u52A1\u6807\u8BC6"),
-      t("\u9884\u7559\uFF1A\u5F53\u524D\u540C\u53D6\u6D88\uFF08\u4E0D\u8BA1\u6570\uFF09\uFF0C\u5BF9\u5E94\u529F\u80FD\u540E\u7EED\u63D0\u4F9B\uFF0C\u9017\u53F7\u5206\u9694"),
+      t("\u5E26\u8FD9\u4E9B\u5B57\u7B26\u7684\u884C\u4E0D\u8FDB\u901F\u8BB0\u9762\u677F\u4E5F\u4E0D\u8BA1\u6570\uFF0C\u9017\u53F7\u5206\u9694"),
       markers.nonTask,
       false,
       async (next) => {

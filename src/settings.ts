@@ -469,6 +469,16 @@ export class QJSettingTab extends PluginSettingTab {
 					this.plugin.refreshPanelViews();
 				}),
 			);
+		new Setting(this.containerEl)
+			.setName(t("显示已取消任务"))
+			.setDesc(t("已取消任务在面板上用 ✕ 标识，点击转为已完成"))
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.config.panel.showCancelled).onChange(async (value) => {
+					this.plugin.config.panel.showCancelled = value;
+					await this.plugin.saveConfig();
+					this.plugin.refreshPanelViews();
+				}),
+			);
 	}
 
 	/** 通用 → 统计 的任务标识组（未完成/已完成/取消/非任务）。 */
@@ -527,7 +537,7 @@ export class QJSettingTab extends PluginSettingTab {
 		);
 		markerInput(
 			t("非任务标识"),
-			t("预留：当前同取消（不计数），对应功能后续提供，逗号分隔"),
+			t("带这些字符的行不进速记面板也不计数，逗号分隔"),
 			markers.nonTask,
 			false,
 			async (next) => {

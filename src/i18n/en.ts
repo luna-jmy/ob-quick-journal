@@ -73,6 +73,9 @@ export const EN: Record<string, string> = {
 	"展开录入": "Show capture bar",
 	"收起录入": "Hide capture bar",
 	"显示已完成任务": "Show completed tasks",
+	"显示已取消任务": "Show cancelled tasks",
+	"已取消任务在面板上用 ✕ 标识，点击转为已完成":
+		"Cancelled tasks appear with a ✕ marker in the feed; tap it to mark them completed",
 	"未完成任务标识": "Unfinished task markers",
 	"计入未完成统计与滚动的勾选框字符（空格始终包含），逗号分隔":
 		"Checkbox characters counted as unfinished / rolled over (space is always included), comma-separated",
@@ -81,8 +84,8 @@ export const EN: Record<string, string> = {
 	"取消任务标识": "Cancelled task markers",
 	"完全不参与任何任务统计的字符，逗号分隔": "Characters excluded from all task statistics, comma-separated",
 	"非任务标识": "Non-task markers",
-	"预留：当前同取消（不计数），对应功能后续提供，逗号分隔":
-		"Reserved: currently same as cancelled (not counted); features to come, comma-separated",
+	"带这些字符的行不进速记面板也不计数，逗号分隔":
+		"Lines with these characters are skipped by the capture feed and all statistics, comma-separated",
 	"滚动未完成任务": "Roll over unfinished tasks",
 	"移动未完成任务": "Move unfinished tasks",
 	"来自": "From",

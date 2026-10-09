@@ -8,6 +8,7 @@
 
 import type { JournalSection } from "../types";
 import { findHeadingIndex, sectionRange } from "./field-lines";
+import { classifyTaskStatus, DEFAULT_TASK_SPEC, type TaskMarkerSpec, type TaskState } from "./task-lines";
 
 export interface SectionEntry {
 	/** 所属日志日（YYYY-MM-DD） */
@@ -32,11 +33,14 @@ export interface SectionEntry {
 	key?: string;
 	/** line：任务行的勾选框字符（" " / "x" / …），非任务行无 */
 	taskStatus?: string;
+	/** line：按任务标识集判出的任务状态（taskStatus 存在时必有） */
+	taskState?: TaskState;
 }
 
 const BRACKET_FIELD_RE = /^\s*[-*]\s*\[([^\][]+?)::\s*(.*?)\]\s*$/;
 const LIST_ITEM_RE = /^\s*[-*]\s+(.*)$/;
-const TASK_ITEM_RE = /^\s*[-*]\s+\[([ xX/-])\]\s*(.*)$/;
+// 单字符勾选框（不限定 x/- 等）：哪种字符算什么状态交给任务标识集判定
+const TASK_ITEM_RE = /^\s*[-*]\s+\[([^\][])\]\s*(.*)$/;
 const TIMESTAMP_RE = /^(\d{1,2}:\d{2})(?::\d{2})?\s+/;
 /** 归档标识：行尾 dataview 内联字段（[archive:: true] / [archive::]），面板隐藏该条 */
 const ARCHIVE_RE = /\s*\[archive::\s*[^\]]*?\]\s*$/;
@@ -55,18 +59,12 @@ export function stripArchive(line: string): { line: string; archived: boolean } 
 	return { line: line.slice(0, m.index).trimEnd(), archived: true };
 }
 
-function taskPrefix(status: string): string {
-	if (status === " ") return "☐";
-	if (status === "x" || status === "X") return "☑";
-	if (status === "-") return "✕";
-	return "◐"; // 进行中（/ 等自定义符号）
-}
-
 /** 单日笔记 → 流条目（只处理传入的 sections；heading 缺失的区段自然无条目）。 */
 export function collectEntries(
 	date: string,
 	lines: string[],
 	sections: JournalSection[],
+	spec: TaskMarkerSpec = DEFAULT_TASK_SPEC,
 ): SectionEntry[] {
 	const out: SectionEntry[] = [];
 	for (const section of sections) {
@@ -145,22 +143,28 @@ export function collectEntries(
 			if (section.type !== "list") continue;
 			const task = TASK_ITEM_RE.exec(line);
 			if (task) {
-				if (task[2].trim() === "") continue;
-				const ts = splitTimestamp(task[2].trim());
-				out.push({
-					date,
-					sectionId: section.id,
-					kind: "line",
-					...ts,
-					// 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
-					text: ts.text,
-					content: ts.text,
-					prefix: line.slice(0, line.length - task[2].length),
-					lineIndex: i,
-					raw: line,
-					taskStatus: task[1],
-				});
-				continue;
+				const state = classifyTaskStatus(task[1], spec);
+				// 非任务行（nonTask 标识）不进面板；未识别字符落到下面当普通列表行
+				if (state === "nonTask") continue;
+				if (state !== null) {
+					if (task[2].trim() === "") continue;
+					const ts = splitTimestamp(task[2].trim());
+					out.push({
+						date,
+						sectionId: section.id,
+						kind: "line",
+						...ts,
+						// 状态符号不进正文：面板里按钮负责显示与切换，别处渲染层按 taskStatus 自行补
+						text: ts.text,
+						content: ts.text,
+						prefix: line.slice(0, line.length - task[2].length),
+						lineIndex: i,
+						raw: line,
+						taskStatus: task[1],
+						taskState: state,
+					});
+					continue;
+				}
 			}
 			const item = LIST_ITEM_RE.exec(line);
 			if (item && item[1].trim() !== "") {

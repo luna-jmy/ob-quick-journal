@@ -535,9 +535,11 @@ export function renderFeedMini(card: HTMLElement, ctx: SummaryCtx): void {
 				cls: "qj-feed-meta",
 				text: `${names.get(e.sectionId) ?? ""}${e.time ? ` · ${e.time}` : ""}`,
 			});
-			// 小卡没有切换按钮，这里按 taskStatus 补状态符号
+			// 小卡没有切换按钮，这里按任务状态补状态符号
 			const text =
-				e.taskStatus !== undefined ? `${taskSymbol(e.taskStatus)} ${e.text}` : e.text;
+				e.taskState !== undefined && e.taskStatus !== undefined
+					? `${taskSymbol(e.taskState, e.taskStatus)} ${e.text}`
+					: e.text;
 			row.createSpan({ cls: "qj-mini-text", text: text.replace(/\n/g, " ") });
 		}
 	}

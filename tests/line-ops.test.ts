@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convertListTask, taskStateOf, toggleTaskLine } from "../src/parse/line-ops";
+import { convertListTask, taskStateOf, taskSymbol, toggleTaskLine } from "../src/parse/line-ops";
 import { dedupeQueries, findQueryBlocks } from "../src/parse/query-blocks";
 import { monthGrid } from "../src/periods/month-grid";
 import { doneByDay } from "../src/metrics/aggregate";
@@ -23,6 +23,25 @@ describe("行级操作", () => {
 		expect(convertListTask("- [ ] 08:44 早上想到的")).toBe("- 08:44 早上想到的");
 		expect(convertListTask("- [x] 已完成 ✅ 2026-09-25")).toBe("- 已完成");
 		expect(convertListTask("普通文字")).toBeNull();
+	});
+
+	it("切换完成（自定义 done 标记）：已取消 ✕ 点击转为已完成；done 标记点击回待办", () => {
+		// 已取消 → 已完成（写入 done 首个标记 + ✅ 日期），与待办的点击行为一致
+		expect(toggleTaskLine("- [-] 放弃的任务", "2026-10-09")).toBe(
+			"- [x] 放弃的任务 ✅ 2026-10-09",
+		);
+		// 自定义 done 标记：按它判完成、按它的首个字符写入
+		expect(toggleTaskLine("- [D] 自定义完成 ✅ 2026-10-08", "2026-10-09", ["D"])).toBe(
+			"- [ ] 自定义完成",
+		);
+		expect(toggleTaskLine("- [ ] 待办", "2026-10-09", ["D"])).toBe("- [D] 待办 ✅ 2026-10-09");
+	});
+
+	it("taskSymbol：已完成 ☑ / 已取消 ✕ / 待办 ☐ / open 标识 ◐", () => {
+		expect(taskSymbol("done", "x")).toBe("☑");
+		expect(taskSymbol("cancelled", "-")).toBe("✕");
+		expect(taskSymbol("open", " ")).toBe("☐");
+		expect(taskSymbol("open", ">")).toBe("◐");
 	});
 });
 

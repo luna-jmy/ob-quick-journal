@@ -54,6 +54,32 @@ export interface TaskMarkerSpec {
 	nonTask: string[];
 }
 
+/** 任务状态（面板图标与过滤用）：open 含隐含空格与 open 标识。 */
+export type TaskState = "open" | "done" | "cancelled";
+
+/** 默认标识集（与 DEFAULT_CONFIG.tasks.markers 一致；未传 spec 的调用方兜底）。 */
+export const DEFAULT_TASK_SPEC: TaskMarkerSpec = {
+	open: [">"],
+	done: ["x", "X"],
+	cancel: ["-", "/"],
+	nonTask: [],
+};
+
+/**
+ * 勾选框字符 → 任务状态：open（含隐含空格与 open 标识）/ done / cancelled；
+ * "nonTask" = 非任务行（面板不收集）；null = 未识别字符（当普通列表行处理）。
+ */
+export function classifyTaskStatus(
+	status: string,
+	spec: TaskMarkerSpec = DEFAULT_TASK_SPEC,
+): TaskState | "nonTask" | null {
+	if (status === " " || spec.open.includes(status)) return "open";
+	if (spec.done.includes(status)) return "done";
+	if (spec.cancel.includes(status)) return "cancelled";
+	if (spec.nonTask.includes(status)) return "nonTask";
+	return null;
+}
+
 /**
  * 采集任务行原文（统计用）：跳过 ``` 围栏；传入标识集时只保留
  * open（含隐含空格）与 done 的行——cancel / nonTask / 未识别字符一律不采集（不计数）。

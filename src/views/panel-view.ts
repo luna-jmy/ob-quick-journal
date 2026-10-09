@@ -23,6 +23,7 @@ import type { SectionEntry } from "../parse/section-entries";
 import { ConfirmModal } from "../ui/confirm-modal";
 import { EntryEditModal } from "../ui/entry-edit-modal";
 import { insertImageAttachment } from "../ui/attachments";
+import { taskSymbol } from "../parse/line-ops";
 import { dateKey } from "../periods/period";
 import { t } from "../i18n";
 
@@ -46,6 +47,10 @@ export class PanelView extends ItemView {
 
 	private get showDone(): boolean {
 		return this.plugin.config.panel.showCompleted;
+	}
+
+	private get showCancelled(): boolean {
+		return this.plugin.config.panel.showCancelled;
 	}
 
 	constructor(leaf: WorkspaceLeaf, private plugin: QuickJournalPlugin) {
@@ -368,7 +373,12 @@ export class PanelView extends ItemView {
 			this.renderFeed();
 			return;
 		}
-		const index = new VaultIndex(this.app, this.plugin.config.journals.daily.dir);
+		const index = new VaultIndex(
+			this.app,
+			this.plugin.config.journals.daily.dir,
+			[],
+			this.plugin.config.tasks.markers,
+		);
 		const today = new Date();
 		const days = Array.from({ length: this.rangeDays }, (_, i) => {
 			const d = new Date(today);
@@ -382,9 +392,8 @@ export class PanelView extends ItemView {
 	private visibleEntries(sections: JournalSection[]): SectionEntry[] {
 		let list = this.entries;
 		if (this.filterId !== "") list = list.filter((e) => e.sectionId === this.filterId);
-		if (!this.showDone) {
-			list = list.filter((e) => !(e.taskStatus === "x" || e.taskStatus === "X"));
-		}
+		if (!this.showDone) list = list.filter((e) => e.taskState !== "done");
+		if (!this.showCancelled) list = list.filter((e) => e.taskState !== "cancelled");
 		const q = this.searchText.trim().toLowerCase();
 		if (q !== "") {
 			const name = new Map(sections.map((s) => [s.id, s.heading.replace(/^#+\s*/, "")]));
@@ -442,11 +451,11 @@ export class PanelView extends ItemView {
 		const item = day.createDiv({ cls: "qj-feed-item" });
 		const head = item.createDiv({ cls: "qj-feed-head" });
 		const meta = head.createDiv({ cls: "qj-feed-meta" });
-		// 任务条目：状态符号可点，直接切换完成
+		// 任务条目：状态符号可点，直接切换完成（已取消 ✕ 点击同样转为已完成）
 		if (entry.taskStatus !== undefined) {
 			const toggle = meta.createEl("button", { cls: "qj-feed-toggle" });
 			toggle.type = "button";
-			toggle.setText(entry.taskStatus === "x" || entry.taskStatus === "X" ? "☑" : "☐");
+			toggle.setText(taskSymbol(entry.taskState ?? "open", entry.taskStatus));
 			toggle.setAttribute("aria-label", t("切换完成"));
 			toggle.onclick = (evt) => {
 				evt.stopPropagation();

@@ -5,7 +5,7 @@
 
 import { TFile, type App } from "obsidian";
 import { parseFieldLines } from "../parse/field-lines";
-import { collectTaskLines, type TaskMarkerSpec } from "../parse/task-lines";
+import { collectTaskLines, DEFAULT_TASK_SPEC, type TaskMarkerSpec } from "../parse/task-lines";
 import { collectEntries, type SectionEntry } from "../parse/section-entries";
 import { parseNoteDateKind, periodFromKey } from "../periods/period";
 import { dateKey } from "../periods/period";
@@ -103,12 +103,13 @@ export class VaultIndex {
 			// 同一日期多文件时首个命中（与 dailyFile / collectDayRecords 同口径）
 			if (date && !byDate.has(date)) byDate.set(date, file);
 		}
+		const spec = this.taskSpec ?? DEFAULT_TASK_SPEC;
 		const entries: SectionEntry[] = [];
 		for (const day of days) {
 			const file = byDate.get(dateKey(day));
 			if (!file) continue;
 			const text = await this.app.vault.cachedRead(file);
-			entries.push(...collectEntries(dateKey(day), text.split(/\r?\n/), sections));
+			entries.push(...collectEntries(dateKey(day), text.split(/\r?\n/), sections, spec));
 		}
 		return entries;
 	}

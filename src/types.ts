@@ -99,13 +99,13 @@ export interface QJConfig {
 	trendSelection?: string;
 	viewLocations: { summary: ViewLocation; panel: ViewLocation };
 	/** 速记面板偏好 */
-	panel: { showCompleted: boolean };
+	panel: { showCompleted: boolean; showCancelled: boolean };
 	/** 统计偏好 */
 	stats: { includeNonDailyTasks: boolean };
 	/**
 	 * 任务标识体系（勾选框字符，逗号分隔；空格始终隐含属于 open）：
-	 * open=未完成（滚动/未完成统计），done=完成统计，cancel=完全不计数，
-	 * nonTask=非任务（预留，当前同 cancel 不计数，后续有相应功能）
+	 * open=未完成（滚动/未完成统计），done=完成统计，cancel=已取消（面板可开关显示），
+	 * nonTask=非任务（面板不收集、不计数）
 	 */
 	tasks: { markers: { open: string[]; done: string[]; cancel: string[]; nonTask: string[] } };
 }
@@ -245,7 +245,7 @@ export const DEFAULT_CONFIG: QJConfig = {
 	summaryLayout: [...DEFAULT_SUMMARY_LAYOUT],
 	summaryQueries: [],
 	viewLocations: { summary: "tab", panel: "tab" },
-	panel: { showCompleted: true },
+	panel: { showCompleted: true, showCancelled: true },
 	stats: { includeNonDailyTasks: true },
 	tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } },
 };
@@ -400,6 +400,9 @@ export function mergeConfig(saved: unknown): QJConfig {
 	if (isRecord(saved.panel)) {
 		if (typeof saved.panel.showCompleted === "boolean") {
 			base.panel.showCompleted = saved.panel.showCompleted;
+		}
+		if (typeof saved.panel.showCancelled === "boolean") {
+			base.panel.showCancelled = saved.panel.showCancelled;
 		}
 	}
 	// 任务标识：旧 rollover.openMarkers 迁入 tasks.markers.open
