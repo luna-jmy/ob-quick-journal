@@ -93,6 +93,7 @@ export class QJSettingTab extends PluginSettingTab {
 
 		new Setting(this.containerEl)
 			.setName(t("界面语言"))
+			.setDesc(`<span style="color: var(--text-error)">${t("命令与侧栏图标名称需重载插件（禁用再启用）后生效")}</span>`)
 			.addDropdown((drop) => {
 				drop.addOption("auto", t("跟随 Obsidian"));
 				drop.addOption("zh", t("中文"));
@@ -229,7 +230,7 @@ export class QJSettingTab extends PluginSettingTab {
 				);
 		}
 
-		new Setting(this.containerEl).setName(t("标题区")).setHeading();
+		new Setting(this.containerEl).setName(t("标题区")).setHeading().setDesc(`<span style="color: var(--text-error)">${t("标题区的增删与改名需重载插件（禁用再启用）后生效（对应快速录入命令）")}</span>`);
 		for (const section of journal.sections) {
 			this.sectionEditor(journal, section);
 		}
@@ -465,6 +466,7 @@ export class QJSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
 					this.plugin.config.panel.showCompleted = value;
 					await this.plugin.saveConfig();
+					this.plugin.refreshPanelViews();
 				}),
 			);
 	}

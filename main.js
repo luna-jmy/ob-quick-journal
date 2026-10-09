@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-10-06T11:35:52.336Z */
+/* Quick Journal — bundled 2026-10-09T05:28:59.010Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -477,6 +477,7 @@ var EN = {
   // ── 设置 ──
   "\u8BBE\u7F6E": "Settings",
   "\u754C\u9762\u8BED\u8A00": "Interface language",
+  "\u547D\u4EE4\u4E0E\u4FA7\u680F\u56FE\u6807\u540D\u79F0\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548": "Command and sidebar-icon names take effect after reloading the plugin (disable and re-enable)",
   "\u8DDF\u968F Obsidian": "Follow Obsidian",
   "\u4E2D\u6587": "Chinese",
   "\u82F1\u6587": "English",
@@ -492,6 +493,7 @@ var EN = {
   "\u4E2A\u6807\u9898\u533A": "heading sections",
   "\u4E2A\u5B57\u6BB5": "fields",
   "\u6807\u9898\u533A": "Heading sections",
+  "\u6807\u9898\u533A\u7684\u589E\u5220\u4E0E\u6539\u540D\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548\uFF08\u5BF9\u5E94\u5FEB\u901F\u5F55\u5165\u547D\u4EE4\uFF09": "Adding, removing, or renaming heading sections takes effect after reloading the plugin (disable and re-enable) \u2014 they drive the quick-capture commands",
   "\u6DFB\u52A0\u6807\u9898\u533A": "Add heading section",
   "\u5220\u9664": "Remove",
   "\u884C\u6A21\u677F": "Line template",
@@ -3177,6 +3179,10 @@ var PanelView = class extends import_obsidian10.ItemView {
   writableSections() {
     return this.panelSections().filter((s) => s.type === "list" || s.type === "paragraph");
   }
+  /** 设置变更后由插件侧调用的重绘入口（如「显示已完成任务」开关）。 */
+  refresh() {
+    this.render();
+  }
   render() {
     const root = this.contentEl;
     root.empty();
@@ -3771,7 +3777,7 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
       })
     );
     this.renderTaskMarkers();
-    new import_obsidian11.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((drop) => {
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).setDesc(`<span style="color: var(--text-error)">${t("\u547D\u4EE4\u4E0E\u4FA7\u680F\u56FE\u6807\u540D\u79F0\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548")}</span>`).addDropdown((drop) => {
       drop.addOption("auto", t("\u8DDF\u968F Obsidian"));
       drop.addOption("zh", t("\u4E2D\u6587"));
       drop.addOption("en", t("\u82F1\u6587"));
@@ -3879,7 +3885,7 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
         })
       );
     }
-    new import_obsidian11.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading();
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u6807\u9898\u533A")).setHeading().setDesc(`<span style="color: var(--text-error)">${t("\u6807\u9898\u533A\u7684\u589E\u5220\u4E0E\u6539\u540D\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548\uFF08\u5BF9\u5E94\u5FEB\u901F\u5F55\u5165\u547D\u4EE4\uFF09")}</span>`);
     for (const section of journal.sections) {
       this.sectionEditor(journal, section);
     }
@@ -4076,6 +4082,7 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
       (toggle) => toggle.setValue(this.plugin.config.panel.showCompleted).onChange(async (value) => {
         this.plugin.config.panel.showCompleted = value;
         await this.plugin.saveConfig();
+        this.plugin.refreshPanelViews();
       })
     );
   }
@@ -4287,6 +4294,12 @@ var QuickJournalPlugin = class extends import_obsidian12.Plugin {
   refreshSummaryViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QJ_SUMMARY)) {
       if (leaf.view instanceof SummaryView) void leaf.view.render();
+    }
+  }
+  /** 设置变更后重绘已打开的速记面板（面板开关类设置不触发汇总刷新）。 */
+  refreshPanelViews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QJ_PANEL)) {
+      if (leaf.view instanceof PanelView) leaf.view.refresh();
     }
   }
   /** 打开某期间的日志/复盘笔记（递归子目录查找；不存在则按该类型建骨架到目录根）。月历入口用。 */

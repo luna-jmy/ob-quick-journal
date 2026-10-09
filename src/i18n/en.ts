@@ -151,6 +151,7 @@ export const EN: Record<string, string> = {
 	// ── 设置 ──
 	"设置": "Settings",
 	"界面语言": "Interface language",
+	"命令与侧栏图标名称需重载插件（禁用再启用）后生效": "Command and sidebar-icon names take effect after reloading the plugin (disable and re-enable)",
 	"跟随 Obsidian": "Follow Obsidian",
 	"中文": "Chinese",
 	"英文": "English",
@@ -166,6 +167,7 @@ export const EN: Record<string, string> = {
 	"个标题区": "heading sections",
 	"个字段": "fields",
 	"标题区": "Heading sections",
+	"标题区的增删与改名需重载插件（禁用再启用）后生效（对应快速录入命令）": "Adding, removing, or renaming heading sections takes effect after reloading the plugin (disable and re-enable) — they drive the quick-capture commands",
 	"添加标题区": "Add heading section",
 	"删除": "Remove",
 	"行模板": "Line template",

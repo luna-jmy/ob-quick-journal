@@ -205,6 +205,13 @@ export default class QuickJournalPlugin extends Plugin {
 		}
 	}
 
+	/** 设置变更后重绘已打开的速记面板（面板开关类设置不触发汇总刷新）。 */
+	refreshPanelViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_QJ_PANEL)) {
+			if (leaf.view instanceof PanelView) leaf.view.refresh();
+		}
+	}
+
 	/** 打开某期间的日志/复盘笔记（递归子目录查找；不存在则按该类型建骨架到目录根）。月历入口用。 */
 	async openPeriodNote(type: PeriodType, key: string): Promise<void> {
 		const journal = this.config.journals[type];

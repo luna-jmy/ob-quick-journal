@@ -99,6 +99,11 @@ export class PanelView extends ItemView {
 		return this.panelSections().filter((s) => s.type === "list" || s.type === "paragraph");
 	}
 
+	/** 设置变更后由插件侧调用的重绘入口（如「显示已完成任务」开关）。 */
+	refresh(): void {
+		this.render();
+	}
+
 	private render(): void {
 		const root = this.contentEl;
 		root.empty();
