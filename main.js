@@ -1,4 +1,4 @@
-/* Quick Journal — bundled 2026-10-09T05:55:16.236Z */
+/* Quick Journal — bundled 2026-10-14T05:47:11.544Z */
 "use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -173,7 +173,10 @@ var DEFAULT_CONFIG = {
   viewLocations: { summary: "tab", panel: "tab" },
   panel: { showCompleted: true, showCancelled: true },
   stats: { includeNonDailyTasks: true },
-  tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } }
+  tasks: {
+    rolloverDays: 7,
+    markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] }
+  }
 };
 function isRecord(v) {
   return typeof v === "object" && v !== null;
@@ -325,6 +328,11 @@ function mergeConfig(saved) {
     const nonTask = sanitizeMarkers(savedTasks == null ? void 0 : savedTasks.nonTask, false);
     if (nonTask.length > 0) base.tasks.markers.nonTask = nonTask;
   }
+  const savedRolloverDays = isRecord(saved.tasks) ? saved.tasks.rolloverDays : void 0;
+  if (typeof savedRolloverDays === "number" && Number.isFinite(savedRolloverDays)) {
+    const days = Math.floor(savedRolloverDays);
+    if (days >= 1) base.tasks.rolloverDays = Math.min(days, 365);
+  }
   if (isRecord(saved.stats)) {
     if (typeof saved.stats.includeNonDailyTasks === "boolean") {
       base.stats.includeNonDailyTasks = saved.stats.includeNonDailyTasks;
@@ -422,6 +430,9 @@ var EN = {
   "\u6CA1\u6709\u53EF\u79FB\u52A8\u7684\u4EFB\u52A1": "No unfinished tasks to move",
   "\u5DF2\u79FB\u52A8": "Moved",
   "\u79FB\u52A8": "Move",
+  "\u7BC7\u65E5\u5FD7": "journals",
+  "\u6EDA\u52A8\u56DE\u770B\u5929\u6570": "Rollover lookback days",
+  "\u672A\u5B8C\u6210\u4EFB\u52A1\u6EDA\u52A8\u53EA\u6536\u96C6\u6700\u8FD1\u8FD9\u4E48\u591A\u5929\u7684\u65E5\u5FD7\uFF081\u2013365\uFF09\uFF0C\u7A97\u53E3\u5916\u4E0D\u518D\u5F80\u56DE\u627E": "Rollover only collects unfinished tasks from the most recent this many days of journals (1\u2013365); older journals are not searched",
   "Enter \u53D1\u9001 \xB7 Shift+Enter \u6362\u884C": "Enter to send \xB7 Shift+Enter for a new line",
   "Enter \u53D1\u9001": "Enter to send",
   "\u5F52\u6863": "Archive",
@@ -3019,23 +3030,39 @@ var RolloverService = class {
       skeletonFor("daily", now, this.getConfig().journals.daily.sections)
     );
   }
-  /** 往回找最近一期有未完成任务的日日志（不含今天；递归子目录，按归属日期倒序）。 */
+  /** 配置的回看天数（清洗后仍防御：非有限数或 <1 回默认 7，封顶 MAX_LOOKBACK）。 */
+  rolloverDays() {
+    const raw = this.getConfig().tasks.rolloverDays;
+    return typeof raw === "number" && Number.isFinite(raw) && raw >= 1 ? Math.min(Math.floor(raw), MAX_LOOKBACK) : 7;
+  }
+  /**
+   * 收集最近 rolloverDays 天（不含今天）所有日日志的未完成任务块（递归子目录，按归属日期）。
+   * 不去重、忠实搬运；窗口内没有未完成任务时返回 null，不回溯窗口外
+   * （窗口语义，替代「无限回找最近一篇有未完成任务的日志」的旧行为）。
+   */
   async preview(now) {
     const markers = this.markers();
     const today = dateKey(now);
+    const start = new Date(now);
+    start.setDate(start.getDate() - (this.rolloverDays() - 1));
+    const startKey = dateKey(start);
     const entries = new VaultIndex(this.app, this.dir("daily")).dailyEntries();
-    for (const entry of entries) {
+    const sources = [];
+    for (let i = 0; i < entries.length && i <= MAX_LOOKBACK; i++) {
+      const entry = entries[i];
       if (entry.date >= today) continue;
+      if (entry.date < startKey) break;
       const text = await this.app.vault.cachedRead(entry.file);
       const blocks = extractUnfinishedBlocks(text.split(/\r?\n/), markers);
       if (blocks.length > 0) {
-        return { sourcePath: entry.file.path, sourceDate: entry.date, blocks };
+        sources.push({ path: entry.file.path, date: entry.date, blocks });
       }
-      if (entries.indexOf(entry) >= MAX_LOOKBACK) break;
     }
-    return null;
+    if (sources.length === 0) return null;
+    sources.reverse();
+    return { sources, total: sources.reduce((n, s) => n + s.blocks.length, 0) };
   }
-  /** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区）。 */
+  /** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区），多源按旧→新一次写入。 */
   async perform(preview, now) {
     var _a;
     const config = this.getConfig();
@@ -3046,7 +3073,7 @@ var RolloverService = class {
       var _a2;
       return s.type === "list" && ((_a2 = s.lineTemplate) != null ? _a2 : "").includes("[ ]");
     })) != null ? _a : sections.find((s) => s.type === "list");
-    const lines = blocksToLines(preview.blocks);
+    const lines = preview.sources.flatMap((source) => blocksToLines(source.blocks));
     const todayLines = todayText.split(/\r?\n/);
     const plan = target ? planInsertLines(todayLines, {
       heading: target.heading,
@@ -3062,15 +3089,15 @@ var RolloverService = class {
     }
     await applyPlanToFile(this.app, today.path, plan);
     const markers = this.markers();
-    const sourceFile = this.app.vault.getAbstractFileByPath(preview.sourcePath);
-    if (!(sourceFile instanceof import_obsidian7.TFile)) {
-      return { ok: false, message: `note not found: ${preview.sourcePath}` };
+    for (const source of preview.sources) {
+      const sourceFile = this.app.vault.getAbstractFileByPath(source.path);
+      if (!(sourceFile instanceof import_obsidian7.TFile)) continue;
+      await this.app.vault.process(
+        sourceFile,
+        (text) => removeBlocks(text, extractUnfinishedBlocks(text.split(/\r?\n/), markers))
+      );
     }
-    await this.app.vault.process(
-      sourceFile,
-      (text) => removeBlocks(text, extractUnfinishedBlocks(text.split(/\r?\n/), markers))
-    );
-    return { ok: true, moved: preview.blocks.length, from: preview.sourceDate };
+    return { ok: true, moved: preview.total, dates: preview.sources.map((s) => s.date) };
   }
 };
 
@@ -3372,7 +3399,7 @@ var PanelView = class extends import_obsidian10.ItemView {
     send.onclick = () => void this.send();
     updateHint();
   }
-  /** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
+  /** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新（多源：最近 N 天窗口，旧→新）。 */
   async rollover() {
     const service = new RolloverService(this.app, () => this.plugin.config);
     const preview = await service.preview(/* @__PURE__ */ new Date());
@@ -3380,14 +3407,18 @@ var PanelView = class extends import_obsidian10.ItemView {
       new import_obsidian10.Notice(t("\u6CA1\u6709\u53EF\u79FB\u52A8\u7684\u4EFB\u52A1"));
       return;
     }
+    const datesLabel = (dates) => {
+      var _a;
+      return dates.length > 1 ? `${dates[0]} ~ ${dates[dates.length - 1]}\uFF08${dates.length} ${t("\u7BC7\u65E5\u5FD7")}\uFF09` : (_a = dates[0]) != null ? _a : "";
+    };
     new ConfirmModal(
       this.app,
       t("\u79FB\u52A8\u672A\u5B8C\u6210\u4EFB\u52A1"),
-      `${t("\u6765\u81EA")} ${preview.sourceDate} \xB7 ${preview.blocks.length} ${t("\u4E2A\u4EFB\u52A1\u5757")}`,
+      `${t("\u6765\u81EA")} ${datesLabel(preview.sources.map((s) => s.date))} \xB7 ${preview.total} ${t("\u4E2A\u4EFB\u52A1\u5757")}`,
       async () => {
         const result = await service.perform(preview, /* @__PURE__ */ new Date());
         if (result.ok) {
-          new import_obsidian10.Notice(`${t("\u5DF2\u79FB\u52A8")} ${result.moved} ${t("\u4E2A\u4EFB\u52A1\u5757")} \u2192 ${result.from}`);
+          new import_obsidian10.Notice(`${t("\u5DF2\u79FB\u52A8")} ${result.moved} ${t("\u4E2A\u4EFB\u52A1\u5757")} \u2192 ${datesLabel(result.dates)}`);
           await this.loadFeed();
         } else {
           new import_obsidian10.Notice(`${t("\u5199\u5165\u5931\u8D25")}: ${result.message}`);
@@ -4177,6 +4208,17 @@ var QJSettingTab = class extends import_obsidian11.PluginSettingTab {
         markers.nonTask = next;
       }
     );
+    new import_obsidian11.Setting(this.containerEl).setName(t("\u6EDA\u52A8\u56DE\u770B\u5929\u6570")).setDesc(t("\u672A\u5B8C\u6210\u4EFB\u52A1\u6EDA\u52A8\u53EA\u6536\u96C6\u6700\u8FD1\u8FD9\u4E48\u591A\u5929\u7684\u65E5\u5FD7\uFF081\u2013365\uFF09\uFF0C\u7A97\u53E3\u5916\u4E0D\u518D\u5F80\u56DE\u627E")).addText((text) => {
+      text.setPlaceholder("7");
+      text.setValue(String(this.plugin.config.tasks.rolloverDays));
+      text.onChange(async (next) => {
+        const parsed = Number.parseInt(next, 10);
+        if (Number.isFinite(parsed) && parsed >= 1) {
+          this.plugin.config.tasks.rolloverDays = Math.min(parsed, 365);
+          await this.plugin.saveConfig();
+        }
+      });
+    });
   }
 };
 
