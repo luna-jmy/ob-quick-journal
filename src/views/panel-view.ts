@@ -292,7 +292,7 @@ export class PanelView extends ItemView {
 		updateHint();
 	}
 
-	/** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新。 */
+	/** 未完成任务滚动：预览 → 确认 → 迁移 → 刷新（多源：最近 N 天窗口，旧→新）。 */
 	private async rollover(): Promise<void> {
 		const service = new RolloverService(this.app, () => this.plugin.config);
 		const preview = await service.preview(new Date());
@@ -300,14 +300,19 @@ export class PanelView extends ItemView {
 			new Notice(t("没有可移动的任务"));
 			return;
 		}
+		// 多源日期摘要：单篇直出，多篇取首尾区间 + 篇数
+		const datesLabel = (dates: string[]): string =>
+			dates.length > 1
+				? `${dates[0]} ~ ${dates[dates.length - 1]}（${dates.length} ${t("篇日志")}）`
+				: (dates[0] ?? "");
 		new ConfirmModal(
 			this.app,
 			t("移动未完成任务"),
-			`${t("来自")} ${preview.sourceDate} · ${preview.blocks.length} ${t("个任务块")}`,
+			`${t("来自")} ${datesLabel(preview.sources.map((s) => s.date))} · ${preview.total} ${t("个任务块")}`,
 			async () => {
 				const result = await service.perform(preview, new Date());
 				if (result.ok) {
-					new Notice(`${t("已移动")} ${result.moved} ${t("个任务块")} → ${result.from}`);
+					new Notice(`${t("已移动")} ${result.moved} ${t("个任务块")} → ${datesLabel(result.dates)}`);
 					await this.loadFeed();
 				} else {
 					new Notice(`${t("写入失败")}: ${result.message}`);

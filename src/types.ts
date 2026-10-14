@@ -107,7 +107,11 @@ export interface QJConfig {
 	 * open=未完成（滚动/未完成统计），done=完成统计，cancel=已取消（面板可开关显示），
 	 * nonTask=非任务（面板不收集、不计数）
 	 */
-	tasks: { markers: { open: string[]; done: string[]; cancel: string[]; nonTask: string[] } };
+	tasks: {
+		/** 滚动回看天数：只收集最近 N 天（不含今天）的未完成任务，1–365 */
+		rolloverDays: number;
+		markers: { open: string[]; done: string[]; cancel: string[]; nonTask: string[] };
+	};
 }
 
 export const BOOL_YES = "✔️";
@@ -247,7 +251,10 @@ export const DEFAULT_CONFIG: QJConfig = {
 	viewLocations: { summary: "tab", panel: "tab" },
 	panel: { showCompleted: true, showCancelled: true },
 	stats: { includeNonDailyTasks: true },
-	tasks: { markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] } },
+	tasks: {
+		rolloverDays: 7,
+		markers: { open: [">"], done: ["x", "X"], cancel: ["-", "/"], nonTask: [] },
+	},
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -428,6 +435,12 @@ export function mergeConfig(saved: unknown): QJConfig {
 		if (cancel.length > 0) base.tasks.markers.cancel = cancel;
 		const nonTask = sanitizeMarkers(savedTasks?.nonTask, false);
 		if (nonTask.length > 0) base.tasks.markers.nonTask = nonTask;
+	}
+	// 滚动回看天数：整数且 ≥1 才采纳，超过 365 钳制（与 RolloverService 的 MAX_LOOKBACK 对齐）
+	const savedRolloverDays = isRecord(saved.tasks) ? saved.tasks.rolloverDays : undefined;
+	if (typeof savedRolloverDays === "number" && Number.isFinite(savedRolloverDays)) {
+		const days = Math.floor(savedRolloverDays);
+		if (days >= 1) base.tasks.rolloverDays = Math.min(days, 365);
 	}
 	if (isRecord(saved.stats)) {
 		if (typeof saved.stats.includeNonDailyTasks === "boolean") {

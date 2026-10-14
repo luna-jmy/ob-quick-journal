@@ -1,6 +1,7 @@
 /**
- * 任务滚动服务：从最近一期含未完成任务的日志，把任务块移到今天的日日志。
- * 源删除走 Vault.process 原子回调；目标插入复用 applyPlan（标题锚点连排）。
+ * 任务滚动服务：收集最近 rolloverDays 天（默认 7，不含今天）所有日日志的未完成任务块，
+ * 按旧→新移到今天的日日志——不去重、忠实搬运；窗口外不回溯。
+ * 源删除逐文件走 Vault.process 原子回调；目标插入复用 applyPlan（标题锚点连排）。
  */
 
 import { TFile, type App } from "obsidian";
@@ -12,14 +13,23 @@ import { dateKey } from "../periods/period";
 import { applyPlanToFile, ensureNote } from "./file-writer";
 import { VaultIndex } from "./vault-index";
 
-export interface RolloverPreview {
-	sourcePath: string;
-	sourceDate: string;
+export interface RolloverSource {
+	/** 源日志路径 */
+	path: string;
+	/** 源日志归属日期（YYYY-MM-DD） */
+	date: string;
 	blocks: TaskBlock[];
 }
 
+export interface RolloverPreview {
+	/** 按日期旧→新排序 */
+	sources: RolloverSource[];
+	/** 全部任务块数 */
+	total: number;
+}
+
 export type RolloverResult =
-	| { ok: true; moved: number; from: string }
+	| { ok: true; moved: number; dates: string[] }
 	| { ok: false; message: string };
 
 const MAX_LOOKBACK = 365;
@@ -59,24 +69,43 @@ export class RolloverService {
 		);
 	}
 
-	/** 往回找最近一期有未完成任务的日日志（不含今天；递归子目录，按归属日期倒序）。 */
+	/** 配置的回看天数（清洗后仍防御：非有限数或 <1 回默认 7，封顶 MAX_LOOKBACK）。 */
+	private rolloverDays(): number {
+		const raw = this.getConfig().tasks.rolloverDays;
+		return typeof raw === "number" && Number.isFinite(raw) && raw >= 1
+			? Math.min(Math.floor(raw), MAX_LOOKBACK)
+			: 7;
+	}
+
+	/**
+	 * 收集最近 rolloverDays 天（不含今天）所有日日志的未完成任务块（递归子目录，按归属日期）。
+	 * 不去重、忠实搬运；窗口内没有未完成任务时返回 null，不回溯窗口外
+	 * （窗口语义，替代「无限回找最近一篇有未完成任务的日志」的旧行为）。
+	 */
 	async preview(now: Date): Promise<RolloverPreview | null> {
 		const markers = this.markers();
 		const today = dateKey(now);
+		const start = new Date(now);
+		start.setDate(start.getDate() - (this.rolloverDays() - 1));
+		const startKey = dateKey(start);
 		const entries = new VaultIndex(this.app, this.dir("daily")).dailyEntries();
-		for (const entry of entries) {
+		const sources: RolloverSource[] = [];
+		for (let i = 0; i < entries.length && i <= MAX_LOOKBACK; i++) {
+			const entry = entries[i];
 			if (entry.date >= today) continue;
+			if (entry.date < startKey) break; // 按日期降序，越出窗口即止
 			const text = await this.app.vault.cachedRead(entry.file);
 			const blocks = extractUnfinishedBlocks(text.split(/\r?\n/), markers);
 			if (blocks.length > 0) {
-				return { sourcePath: entry.file.path, sourceDate: entry.date, blocks };
+				sources.push({ path: entry.file.path, date: entry.date, blocks });
 			}
-			if (entries.indexOf(entry) >= MAX_LOOKBACK) break;
 		}
-		return null;
+		if (sources.length === 0) return null;
+		sources.reverse(); // 旧 → 新
+		return { sources, total: sources.reduce((n, s) => n + s.blocks.length, 0) };
 	}
 
-	/** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区）。 */
+	/** 执行迁移：目标 = 今天日日志的任务列表区（首个行模板带 `[ ]` 的 list 区），多源按旧→新一次写入。 */
 	async perform(preview: RolloverPreview, now: Date): Promise<RolloverResult> {
 		const config = this.getConfig();
 
@@ -89,7 +118,7 @@ export class RolloverService {
 		const target =
 			sections.find((s) => s.type === "list" && (s.lineTemplate ?? "").includes("[ ]")) ??
 			sections.find((s) => s.type === "list");
-		const lines = blocksToLines(preview.blocks);
+		const lines = preview.sources.flatMap((source) => blocksToLines(source.blocks));
 		const todayLines = todayText.split(/\r?\n/);
 
 		const plan = target
@@ -108,16 +137,16 @@ export class RolloverService {
 		}
 		await applyPlanToFile(this.app, today.path, plan);
 
-		// 3. 源文件删除（原子，标记集与预览一致）
+		// 3. 逐源原子删除（标记集与预览一致）；源在预览后消失则跳过——任务已进今天，不阻断
 		const markers = this.markers();
-		const sourceFile = this.app.vault.getAbstractFileByPath(preview.sourcePath);
-		if (!(sourceFile instanceof TFile)) {
-			return { ok: false, message: `note not found: ${preview.sourcePath}` };
+		for (const source of preview.sources) {
+			const sourceFile = this.app.vault.getAbstractFileByPath(source.path);
+			if (!(sourceFile instanceof TFile)) continue;
+			await this.app.vault.process(sourceFile, (text) =>
+				removeBlocks(text, extractUnfinishedBlocks(text.split(/\r?\n/), markers)),
+			);
 		}
-		await this.app.vault.process(sourceFile, (text) =>
-			removeBlocks(text, extractUnfinishedBlocks(text.split(/\r?\n/), markers)),
-		);
 
-		return { ok: true, moved: preview.blocks.length, from: preview.sourceDate };
+		return { ok: true, moved: preview.total, dates: preview.sources.map((s) => s.date) };
 	}
 }

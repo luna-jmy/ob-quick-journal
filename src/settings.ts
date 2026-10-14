@@ -544,5 +544,20 @@ export class QJSettingTab extends PluginSettingTab {
 				markers.nonTask = next;
 			},
 		);
+		// 滚动回看天数：窗口语义的核心参数（1–365）
+		new Setting(this.containerEl)
+			.setName(t("滚动回看天数"))
+			.setDesc(t("未完成任务滚动只收集最近这么多天的日志（1–365），窗口外不再往回找"))
+			.addText((text) => {
+				text.setPlaceholder("7");
+				text.setValue(String(this.plugin.config.tasks.rolloverDays));
+				text.onChange(async (next) => {
+					const parsed = Number.parseInt(next, 10);
+					if (Number.isFinite(parsed) && parsed >= 1) {
+						this.plugin.config.tasks.rolloverDays = Math.min(parsed, 365);
+						await this.plugin.saveConfig();
+					}
+				});
+			});
 	}
 }

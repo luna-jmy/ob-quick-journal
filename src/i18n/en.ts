@@ -93,6 +93,10 @@ export const EN: Record<string, string> = {
 	"没有可移动的任务": "No unfinished tasks to move",
 	"已移动": "Moved",
 	"移动": "Move",
+	"篇日志": "journals",
+	"滚动回看天数": "Rollover lookback days",
+	"未完成任务滚动只收集最近这么多天的日志（1–365），窗口外不再往回找":
+		"Rollover only collects unfinished tasks from the most recent this many days of journals (1–365); older journals are not searched",
 	"Enter 发送 · Shift+Enter 换行": "Enter to send · Shift+Enter for a new line",
 	"Enter 发送": "Enter to send",
 	"归档": "Archive",
