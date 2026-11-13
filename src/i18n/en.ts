@@ -23,6 +23,15 @@ export const EN: Record<string, string> = {
 	"取消": "Cancel",
 	"选择动作": "Choose a heading section",
 	"快速录入": "Quick capture",
+	"清空": "Clear",
+	// ── 当前笔记字段批量录入 ──
+	"当前笔记全部字段": "All fields of the current note",
+	"当前笔记字段": "Current note's fields",
+	"未分组字段": "Ungrouped fields",
+	"没有找到内联字段": "No inline fields found",
+	"已更新字段": "Fields updated",
+	"笔记已被修改，未写入，请重试": "The note changed while the form was open; nothing was written. Try again",
+	"请先打开一个笔记文件": "Open a note first",
 	// ── 写入结果 ──
 	"已写入": "Written to",
 	"创建笔记": "Created note",

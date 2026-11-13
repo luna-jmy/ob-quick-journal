@@ -15,6 +15,7 @@ import { skeletonFor, noteKeyFor } from "./capture/skeleton";
 import { CaptureModal } from "./ui/capture-modal";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { ActionPickerModal } from "./ui/action-picker-modal";
+import { NoteFieldsModal } from "./ui/note-fields-modal";
 import { SummaryView, VIEW_TYPE_QJ_SUMMARY } from "./views/summary-view";
 import { PanelView, VIEW_TYPE_QJ_PANEL } from "./views/panel-view";
 import { QJSettingTab } from "./settings";
@@ -68,6 +69,27 @@ export default class QuickJournalPlugin extends Plugin {
 			}
 		}
 
+		this.addCommand({
+			id: "fill-note-fields",
+			name: `${t("快速录入")}: ${t("当前笔记全部字段")}`,
+			callback: () => void this.openNoteFields(),
+		});
+		/*
+		 * 笔记 ⋯ 菜单与文件列表右键（QJ 首处 file-menu 注册）。
+		 * 面向「当前打开的那篇」，不挑日志——扫描层本来就认任意笔记的行内字段。
+		 */
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu, file) => {
+				if (!(file instanceof TFile) || file.extension !== "md") return;
+				menu.addItem((item) =>
+					item
+						.setTitle(`${t("快速录入")}: ${t("当前笔记全部字段")}`)
+						.setIcon("notebook-pen")
+						.onClick(() => void this.openNoteFields(file)),
+				);
+			}),
+		);
+
 		this.addRibbonIcon("notebook-pen", t("快速录入"), () => this.openPicker());
 		this.addSettingTab(new QJSettingTab(this.app, this));
 	}
@@ -88,6 +110,17 @@ export default class QuickJournalPlugin extends Plugin {
 		new ActionPickerModal(this.app, this.config.journals.daily.sections, (section) =>
 			this.openSectionCapture("daily", section),
 		).open();
+	}
+
+	/** 批量录入当前笔记的行内字段；菜单入口带具体文件，命令入口取活动文件。 */
+	private async openNoteFields(file?: TFile): Promise<void> {
+		const target = file ?? this.app.workspace.getActiveFile();
+		if (!target || target.extension !== "md") {
+			new Notice(t("请先打开一个笔记文件"));
+			return;
+		}
+		const text = await this.app.vault.cachedRead(target);
+		new NoteFieldsModal(this.app, target, text, this.config).open();
 	}
 
 	private addSectionCommand(type: PeriodType, section: JournalSection): void {

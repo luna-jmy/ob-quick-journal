@@ -136,6 +136,28 @@
 	text-align: center;
 }
 
+/*
+ * 当前笔记字段批量录入：长笔记一屏放不下，表单体限高滚动（footer 留在视口内）。
+ * 小节头是分组标签不是内容，弱化成 muted 小字。
+ */
+.qj-note-fields {
+	max-height: min(60vh, 560px);
+	overflow-y: auto;
+}
+
+.qj-note-fields-section {
+	margin-top: var(--size-4-4);
+	padding-bottom: var(--size-2-1);
+	border-bottom: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-medium);
+}
+
+.qj-note-fields-section:first-child {
+	margin-top: 0;
+}
+
 /* ── 打卡 / 数据行 ─────────────────────────────────────────────────────── */
 
 .qj-checkin-row,

@@ -7,6 +7,7 @@
 
 import { TFile, type App } from "obsidian";
 import { applyPlan, type WritePlan } from "../capture/plan";
+import { applyFieldOccurrences, type OccurrenceEdit } from "../parse/note-fields";
 
 export async function ensureNote(app: App, path: string, skeleton: string): Promise<TFile> {
 	const existing = app.vault.getAbstractFileByPath(path);
@@ -46,4 +47,52 @@ export async function applyPlanToFile(app: App, path: string, plan: WritePlan): 
 	const file = app.vault.getAbstractFileByPath(path);
 	if (!(file instanceof TFile)) throw new Error(`note not found: ${path}`);
 	await app.vault.process(file, (text) => applyPlan(text, plan));
+}
+
+/** 一行的批量字段改动：`raw` 是扫描时的整行原文（stale 校验基准） */
+export interface FieldLineEdits {
+	lineIndex: number;
+	raw: string;
+	changes: OccurrenceEdit[];
+}
+
+export type FieldEditResult = "ok" | "stale" | "error";
+
+/**
+ * 批量替换行内字段值（rewriteRawLine 的 stale 先例推广成整批 all-or-nothing）：
+ * vault.process 里**先整批校验**每行仍与扫描时一致，任一行被别的插件 / 窗口改过
+ * → 原文返回（什么也不写）+ "stale"；全过才逐行拼接替换。
+ * 拒写宁可整批失败也不半批落盘——半批会让「哪些字段改了」变成猜谜。
+ */
+export async function applyFieldEdits(
+	app: App,
+	path: string,
+	edits: readonly FieldLineEdits[],
+): Promise<FieldEditResult> {
+	const file = app.vault.getAbstractFileByPath(path);
+	if (!(file instanceof TFile)) return "error";
+	let stale = false;
+	try {
+		await app.vault.process(file, (text) => {
+			const lines = text.split(/\r?\n/);
+			for (const edit of edits) {
+				if (lines[edit.lineIndex] !== edit.raw) {
+					stale = true;
+					return text;
+				}
+			}
+			for (const edit of edits) {
+				const next = applyFieldOccurrences(edit.raw, edit.changes);
+				if (next === null) {
+					stale = true;
+					return text;
+				}
+				lines[edit.lineIndex] = next;
+			}
+			return lines.join("\n");
+		});
+	} catch {
+		return "error";
+	}
+	return stale ? "stale" : "ok";
 }

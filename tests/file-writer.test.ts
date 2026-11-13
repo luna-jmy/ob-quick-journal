@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TFile, type App } from "obsidian";
-import { ensureNote } from "../src/services/file-writer";
+import { applyFieldEdits, ensureNote, type FieldLineEdits } from "../src/services/file-writer";
 
 /** d.ts 里 TFile 无公开构造签名（运行时 mock 的是带 path 的简单类），类型层面绕开 */
 function makeFile(path: string): TFile {
@@ -78,5 +78,62 @@ describe("ensureNote", () => {
 		app.fileManager.trashFile.mockRejectedValue(new Error("locked"));
 		const file = await ensureNote(app as unknown as App, "dir/2026-09-30.md", "skeleton");
 		expect(file).toBe(original);
+	});
+});
+
+/** applyFieldEdits 用：vault.process 落到内存文本上，模拟真实原子回调 */
+interface ProcessApp {
+	vault: {
+		getAbstractFileByPath: ReturnType<typeof vi.fn>;
+		process: ReturnType<typeof vi.fn>;
+	};
+}
+
+function processApp(initial: string): {
+	app: ProcessApp;
+	store: { text: string };
+	file: TFile;
+} {
+	const file = makeFile("day/2026-11-13.md");
+	const store = { text: initial };
+	const app = {
+		vault: {
+			getAbstractFileByPath: vi.fn((p: string) => (p === file.path ? file : null)),
+			process: vi.fn(async (_f: TFile, fn: (text: string) => string) => {
+				store.text = fn(store.text);
+				return store.text;
+			}),
+		},
+	};
+	return { app, store, file };
+}
+
+describe("applyFieldEdits", () => {
+	const edits = (text: string): FieldLineEdits[] => [
+		{ lineIndex: 1, raw: text.split("\n")[1], changes: [{ matchIndex: 0, value: "✔️" }] },
+	];
+
+	it("整批一致：逐行替换并返回 ok", async () => {
+		const initial = "# 日志\n- [💊medicine::]";
+		const { app, store, file } = processApp(initial);
+		const result = await applyFieldEdits(app as unknown as App, file.path, edits(initial));
+		expect(result).toBe("ok");
+		expect(store.text).toBe("# 日志\n- [💊medicine:: ✔️]");
+	});
+
+	it("任一行已变：整批拒写（原文不动），返回 stale", async () => {
+		const initial = "# 日志\n- [💊medicine::]";
+		const { app, store, file } = processApp(initial);
+		// 表单开着的时候别的插件改了第 0 行——raw 对不上就整批不写
+		const stale = [{ lineIndex: 0, raw: "# 旧标题", changes: [{ matchIndex: 0, value: "x" }] }];
+		const result = await applyFieldEdits(app as unknown as App, file.path, stale);
+		expect(result).toBe("stale");
+		expect(store.text).toBe(initial);
+	});
+
+	it("文件不存在返回 error", async () => {
+		const { app } = processApp("");
+		const result = await applyFieldEdits(app as unknown as App, "other/note.md", []);
+		expect(result).toBe("error");
 	});
 });
